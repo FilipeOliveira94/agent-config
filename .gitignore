@@ -1,0 +1,13 @@
+# Raster images stay local. SVG templates stay tracked.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.ico
+*.tif
+*.tiff
+*.avif
+*.heic
+*.heif
