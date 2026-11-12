@@ -11,6 +11,8 @@ git clone <repo-url> ~/.agents
 mkdir -p ~/.cursor/skills ~/.claude/skills
 ln -sfn ~/.agents/skills/issue-cycle ~/.cursor/skills/issue-cycle
 ln -sfn ~/.agents/skills/issue-cycle ~/.claude/skills/issue-cycle
+ln -sfn ~/.agents/skills/linkedin-platform-post ~/.cursor/skills/linkedin-platform-post
+ln -sfn ~/.agents/skills/linkedin-platform-post ~/.claude/skills/linkedin-platform-post
 ```
 
 Windows PowerShell, for a Windows-native agent:
@@ -20,6 +22,8 @@ git clone <repo-url> "$env:USERPROFILE\.agents"
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.cursor\skills", "$env:USERPROFILE\.claude\skills"
 New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.cursor\skills\issue-cycle" -Target "$env:USERPROFILE\.agents\skills\issue-cycle"
 New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.claude\skills\issue-cycle" -Target "$env:USERPROFILE\.agents\skills\issue-cycle"
+New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.cursor\skills\linkedin-platform-post" -Target "$env:USERPROFILE\.agents\skills\linkedin-platform-post"
+New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.claude\skills\linkedin-platform-post" -Target "$env:USERPROFILE\.agents\skills\linkedin-platform-post"
 ```
 
 | Agent | Path it reads, under that same home |

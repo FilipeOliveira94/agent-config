@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1360" viewBox="0 0 1920 1360" role="img">
+  <title>That report number: where does it come from?</title>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1c2430" flood-opacity="0.12"/>
+    </filter>
+    <filter id="shadow-sm" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1c2430" flood-opacity="0.08"/>
+    </filter>
+    <clipPath id="report-clip">
+      <rect x="1220" y="268" width="644" height="752" rx="32"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1920" height="1360" fill="#f3ecdf"/>
+  <circle cx="170" cy="110" r="200" fill="#f6d2b8"/>
+  <circle cx="1760" cy="820" r="240" fill="#d7e5f1"/>
+
+  <text x="56" y="72" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="18" font-weight="700" letter-spacing="3.2" fill="#c4622d">OPEN DATA PLATFORM</text>
+  <text x="56" y="154" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="64" font-weight="700" fill="#1c2430">That report number:</text>
+  <text x="56" y="226" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="64" font-style="italic" font-weight="500" fill="#d4652f">where does it come from?</text>
+
+  <!-- SOURCES -->
+  <text x="56" y="292" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="2.2" fill="#1c2430">SOURCES</text>
+  <rect x="56" y="304" width="92" height="4" rx="2" fill="#d4652f"/>
+
+  <g filter="url(#shadow-sm)">
+    <g transform="rotate(-2 146 372)">
+      <rect x="56" y="322" width="180" height="100" rx="18" fill="#b8432f"/>
+      <text x="74" y="368" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Olist</text>
+      <text x="74" y="396" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" fill="#ffd5c8">orders</text>
+    </g>
+    <g transform="rotate(1.5 338 372)">
+      <rect x="248" y="322" width="180" height="100" rx="18" fill="#c5daf3"/>
+      <text x="266" y="368" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" fill="#1c2430">Product API</text>
+      <text x="266" y="396" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" fill="#243e5c">catalog</text>
+    </g>
+    <g transform="rotate(1.3 146 486)">
+      <rect x="56" y="436" width="180" height="100" rx="18" fill="#b7e0c8"/>
+      <text x="74" y="482" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" fill="#1c2430">Store data</text>
+      <text x="74" y="510" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" fill="#1e4634">fictional orders</text>
+    </g>
+    <g transform="rotate(-1.4 338 486)">
+      <rect x="248" y="436" width="180" height="100" rx="18" fill="#f0d48a"/>
+      <text x="266" y="482" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#1c2430">Clicks</text>
+      <text x="266" y="510" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" fill="#5c4510">site sessions</text>
+    </g>
+  </g>
+
+  <!-- STORAGE -->
+  <g filter="url(#shadow)">
+    <rect x="56" y="560" width="372" height="460" rx="28" fill="#243044"/>
+  </g>
+  <text x="84" y="612" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="2.4" fill="#f0b27a">STORAGE</text>
+  <g fill="none" stroke="#f0b27a" stroke-width="2.5">
+    <rect x="84" y="648" width="92" height="116" rx="8" fill="#2c3b50"/>
+    <rect x="102" y="670" width="92" height="116" rx="8" fill="#314256"/>
+    <rect x="120" y="692" width="92" height="116" rx="8" fill="#3a4d63"/>
+  </g>
+  <text x="240" y="710" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="15" font-weight="700" letter-spacing="1.8" fill="#f0b27a">MINIO</text>
+  <text x="240" y="756" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#ffffff">Raw files,</text>
+  <text x="240" y="792" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#ffffff">kept</text>
+  <text x="84" y="870" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#d5dee8">With date and origin</text>
+  <text x="84" y="910" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#d5dee8">Bad rows stay visible</text>
+  <text x="84" y="950" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#d5dee8">Ready to reprocess</text>
+
+  <!-- arrow storage to processing -->
+  <circle cx="450" cy="790" r="16" fill="#d4652f"/>
+  <path d="M443 790 h14 M452 783 l7 7 l-7 7" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- PROCESSING -->
+  <g filter="url(#shadow)">
+    <rect x="472" y="268" width="708" height="752" rx="32" fill="#1e3a5f"/>
+  </g>
+  <text x="504" y="320" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="2.4" fill="#ffffff">PROCESSING</text>
+  <rect x="700" y="296" width="132" height="34" rx="17" fill="#e6b325"/>
+  <text x="766" y="318" text-anchor="middle" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.4" fill="#1c2430">ICEBERG</text>
+  <text x="848" y="319" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="18" fill="#d6e2f0">shared tables</text>
+
+  <text x="504" y="378" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="15" font-weight="700" letter-spacing="1.8" fill="#f0b27a">SPARK WRITES</text>
+  <rect x="504" y="396" width="644" height="148" rx="18" fill="#c56a32"/>
+  <text x="532" y="454" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="30" font-weight="700" fill="#ffffff">Bronze</text>
+  <text x="532" y="496" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#ffe6d4">Store the row as it landed</text>
+
+  <rect x="504" y="560" width="644" height="168" rx="18" fill="#9aafbe"/>
+  <text x="532" y="616" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="30" font-weight="700" fill="#1c2430">Silver</text>
+  <text x="532" y="656" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#1c2430">Clean, type, and drop duplicates</text>
+  <text x="532" y="690" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" fill="#1c2430">Data quality tests</text>
+
+  <text x="504" y="768" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="15" font-weight="700" letter-spacing="1.8" fill="#f3d78a">TRINO AND DBT BUILD</text>
+  <rect x="504" y="786" width="644" height="200" rx="18" fill="#e6b325"/>
+  <text x="532" y="842" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="30" font-weight="700" fill="#1c2430">Gold</text>
+  <text x="532" y="878" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="20" fill="#3d3420">Business questions, by domain</text>
+  <g font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" font-weight="700" fill="#ffffff">
+    <rect x="532" y="904" width="124" height="34" rx="17" fill="#1e3a5f"/>
+    <text x="594" y="926" text-anchor="middle">Delivery</text>
+    <rect x="668" y="904" width="112" height="34" rx="17" fill="#1e3a5f"/>
+    <text x="724" y="926" text-anchor="middle">Buyers</text>
+    <rect x="792" y="904" width="112" height="34" rx="17" fill="#1e3a5f"/>
+    <text x="848" y="926" text-anchor="middle">Sellers</text>
+    <rect x="916" y="904" width="128" height="34" rx="17" fill="#1e3a5f"/>
+    <text x="980" y="926" text-anchor="middle">Sessions</text>
+  </g>
+
+  <!-- arrow processing to results -->
+  <circle cx="1198" cy="644" r="16" fill="#d4652f"/>
+  <path d="M1191 644 h14 M1200 637 l7 7 l-7 7" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- RESULTS -->
+  <g filter="url(#shadow)">
+    <rect x="1220" y="268" width="644" height="752" rx="32" fill="#fffdf8"/>
+  </g>
+  <g clip-path="url(#report-clip)">
+    <rect x="1220" y="268" width="644" height="12" fill="#d4652f"/>
+  </g>
+  <text x="1256" y="328" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="2.4" fill="#c4512c">RESULTS</text>
+
+  <rect x="1256" y="352" width="572" height="196" rx="22" fill="#1e3a5f"/>
+  <text x="1288" y="392" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="14" font-weight="700" letter-spacing="1.8" fill="#f0b27a">EXAMPLE FIGURE</text>
+  <text x="1288" y="478" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="78" font-weight="700" fill="#ffffff">94%</text>
+  <text x="1488" y="458" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="26" font-weight="700" fill="#ffffff">On-time</text>
+  <text x="1488" y="492" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="26" font-weight="700" fill="#ffffff">delivery</text>
+
+  <text x="1256" y="596" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="16" font-weight="700" letter-spacing="1.4" fill="#1c2430">QUESTIONS THE MARTS ANSWER</text>
+
+  <g font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="24" fill="#1c2430">
+    <circle cx="1272" cy="640" r="5" fill="#d4652f"/>
+    <text x="1292" y="648">Was delivery on time?</text>
+    <circle cx="1272" cy="692" r="5" fill="#d4652f"/>
+    <text x="1292" y="700">Do late orders score lower?</text>
+    <circle cx="1272" cy="744" r="5" fill="#d4652f"/>
+    <text x="1292" y="752">Which leads become sellers?</text>
+    <circle cx="1272" cy="796" r="5" fill="#d4652f"/>
+    <text x="1292" y="804">Where do buyers live?</text>
+  </g>
+
+  <rect x="1256" y="840" width="88" height="3" rx="1.5" fill="#eadfce"/>
+  <circle cx="1278" cy="900" r="22" fill="#1e3a5f"/>
+  <path d="M1267 900 l8 8 l16 -18" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1314" y="892" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="20" fill="#1c2430">Published only when</text>
+  <text x="1314" y="918" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="20" font-weight="700" fill="#1c2430">it matches the source.</text>
+
+  <!-- STILL AHEAD -->
+  <g filter="url(#shadow)">
+    <rect x="56" y="1048" width="1808" height="272" rx="28" fill="#1e3a5f"/>
+  </g>
+  <text x="88" y="1100" font-family="Ubuntu Sans, DejaVu Sans, sans-serif" font-size="22" font-weight="700" letter-spacing="2.4" fill="#ffffff">STILL AHEAD</text>
+
+  <g font-family="Ubuntu Sans, DejaVu Sans, sans-serif" fill="#ffffff">
+    <circle cx="100" cy="1162" r="6" fill="#f0b27a"/>
+    <text x="118" y="1168" font-size="22" font-weight="700">Airflow</text>
+    <text x="118" y="1194" font-size="16" fill="#d6e2f0">daily and weekly</text>
+
+    <circle cx="530" cy="1162" r="6" fill="#f0b27a"/>
+    <text x="548" y="1168" font-size="22" font-weight="700">Backfills</text>
+    <text x="548" y="1194" font-size="16" fill="#d6e2f0">rerun a window</text>
+
+    <circle cx="960" cy="1162" r="6" fill="#f0b27a"/>
+    <text x="978" y="1168" font-size="22" font-weight="700">Monitoring</text>
+    <text x="978" y="1194" font-size="16" fill="#d6e2f0">run health</text>
+
+    <circle cx="1390" cy="1162" r="6" fill="#f0b27a"/>
+    <text x="1408" y="1168" font-size="22" font-weight="700">Lineage</text>
+    <text x="1408" y="1194" font-size="16" fill="#d6e2f0">path of a real run</text>
+
+    <circle cx="100" cy="1256" r="6" fill="#f0b27a"/>
+    <text x="118" y="1262" font-size="22" font-weight="700">CDC</text>
+    <text x="118" y="1288" font-size="16" fill="#d6e2f0">live changes</text>
+
+    <circle cx="530" cy="1256" r="6" fill="#f0b27a"/>
+    <text x="548" y="1262" font-size="22" font-weight="700">SCD</text>
+    <text x="548" y="1288" font-size="16" fill="#d6e2f0">change history</text>
+
+    <circle cx="960" cy="1256" r="6" fill="#f0b27a"/>
+    <text x="978" y="1262" font-size="22" font-weight="700">Charts</text>
+    <text x="978" y="1288" font-size="16" fill="#d6e2f0">Superset and Jupyter</text>
+
+    <circle cx="1390" cy="1256" r="6" fill="#f0b27a"/>
+    <text x="1408" y="1262" font-size="22" font-weight="700">AWS</text>
+    <text x="1408" y="1288" font-size="16" fill="#d6e2f0">S3, Glue, Athena</text>
+  </g>
+</svg>
