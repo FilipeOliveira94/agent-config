@@ -5,7 +5,7 @@ description: "Leva uma issue (ou fase) do plano aprovado até a entrega verifica
 
 # Ciclo de issue
 
-Uma issue ou fase por vez. O texto de aceite é a definição de pronto: não puxe issues futuras e não mude o aceite durante a construção. As regras de time estão em `fluxo-dev.md`; o `AGENTS.md` do repositório prevalece no que for específico do projeto.
+Uma issue ou fase por vez. O texto de aceite é a definição de pronto: não puxe issues futuras e não mude o aceite durante a construção. As regras de time estão na skill `fluxo-dev`; o `AGENTS.md` do repositório prevalece no que for específico do projeto.
 
 ## 1. Planejar (PO, só quando o Filipe pedir)
 
