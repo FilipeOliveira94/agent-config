@@ -13,6 +13,8 @@ ln -sfn ~/.agents/skills/issue-cycle ~/.cursor/skills/issue-cycle
 ln -sfn ~/.agents/skills/issue-cycle ~/.claude/skills/issue-cycle
 ln -sfn ~/.agents/skills/linkedin-platform-post ~/.cursor/skills/linkedin-platform-post
 ln -sfn ~/.agents/skills/linkedin-platform-post ~/.claude/skills/linkedin-platform-post
+ln -sfn ~/.agents/skills/fluxo-dev ~/.cursor/skills/fluxo-dev
+ln -sfn ~/.agents/skills/fluxo-dev ~/.claude/skills/fluxo-dev
 ```
 
 Windows PowerShell, for a Windows-native agent:
@@ -24,6 +26,8 @@ New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.cursor\skills\is
 New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.claude\skills\issue-cycle" -Target "$env:USERPROFILE\.agents\skills\issue-cycle"
 New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.cursor\skills\linkedin-platform-post" -Target "$env:USERPROFILE\.agents\skills\linkedin-platform-post"
 New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.claude\skills\linkedin-platform-post" -Target "$env:USERPROFILE\.agents\skills\linkedin-platform-post"
+New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.cursor\skills\fluxo-dev" -Target "$env:USERPROFILE\.agents\skills\fluxo-dev"
+New-Item -ItemType SymbolicLink -Force -Path "$env:USERPROFILE\.claude\skills\fluxo-dev" -Target "$env:USERPROFILE\.agents\skills\fluxo-dev"
 ```
 
 | Agent | Path it reads, under that same home |
