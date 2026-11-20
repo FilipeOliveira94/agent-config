@@ -9,7 +9,7 @@ Uma issue ou fase por vez. O texto de aceite é a definição de pronto: não pu
 
 Ciclo: plan → (tarefa grande: aprovação do plano) → implementação numa branch nova a partir da `main` atualizada → checks/testes → commit, push da branch e PR com resumo. O merge é sempre do Filipe: o agente nunca faz merge nem apaga branch.
 
-Exceção: no `open-data-platform`, commits convencionais na `main` local, sem push (o Filipe publica).
+Vale para todos os projetos, inclusive o `open-data-platform`.
 
 ## Modo: pequena ou grande
 
@@ -25,7 +25,7 @@ Leia a issue, o aceite e o status do projeto (`PROJECT_STATUS.md`/`ROADMAP.md`) 
 
 ## 2. Implementar
 
-Atualize a `main` (`git pull`) e crie uma branch nova a partir dela (no `open-data-platform`, trabalhe na `main` local).
+Atualize a `main` (`git pull`) e crie uma branch nova a partir dela.
 
 Faça a menor mudança que torna o comportamento aceito verdadeiro. Não acrescente confirmação, restrição ou passo que a issue não pediu. Ao extrair lógica repetida ou escolher fronteiras entre módulos, consulte a skill `code-structure`; a arquitetura existente do projeto prevalece.
 
@@ -41,7 +41,5 @@ Commits convencionais, push da branch e PR com resumo:
 - o que foi feito e como cumpre o aceite;
 - checks e testes rodados, com as saídas relevantes;
 - o que segue aberto ou ficou de fora.
-
-No `open-data-platform`, sem push nem PR: informe os hashes dos commits locais e os checks.
 
 Pare aí. Não faça merge, não apague a branch, não rode CD. Correções pedidas na revisão entram como novos commits na mesma branch.
