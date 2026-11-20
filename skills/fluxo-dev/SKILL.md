@@ -1,36 +1,27 @@
 ---
 name: fluxo-dev
-description: "Fluxo de desenvolvimento do Filipe (PO, dev, Reviewer): leia antes de planejar, implementar, revisar, fazer push, merge ou deploy em qualquer projeto de software ou dados dele, ou ao acordar outro bot do time."
+description: "Fluxo de desenvolvimento simplificado do Filipe (PO de Projetos, Reviewer de Projetos, T3 Code + Claude): leia antes de dar status de projeto, mandar issue ao T3, revisar PR ou resumir o que foi feito em qualquer projeto de software ou dados dele."
 ---
 
-# Fluxo de desenvolvimento (PO, dev, Reviewer, Filipe)
+# Fluxo de desenvolvimento (desde 20/11/2026)
 
-O Filipe decide. Nenhum bot age sem o gatilho dele indicado abaixo.
+Modelo simples: o Claude no T3 Code faz o trabalho, o Filipe revisa e faz o merge, e os bots só fazem o que ele pede. Este fluxo substitui o antigo (POs separados, devs por projeto, aprovação dupla, Reviewer fazendo merge) e as regras antigas da memória compartilhada sobre ele.
 
-**Ferramentas.** Todo trabalho roda no T3 Code (CLI `t3` no WSL) com o Claude, nunca em cloud agents. Modelo: Claude Opus 5.5. Fallback: Grok 4.7 pelo provider Cursor no T3, só quando acabar o limite do Claude Pro.
+## Papéis
+- **Filipe:** pede status, escolhe a issue, revisa o PR, faz o merge e apaga a branch. Pode fazer tudo sozinho no T3 e depois pedir ao bot para se atualizar.
+- **Claude (T3 Code, Claude Opus 5.5):** por issue, `plan` → implementa numa branch → commit, push da branch e abre o PR. Nunca faz merge. Fallback: Grok 4.7 pelo provider Cursor no T3, só quando acabar o limite do Claude Pro.
+- **PO de Projetos (bot):** só quando o Filipe pede: (1) status conciso de um projeto ou de todos; (2) manda a issue escolhida ao T3 e encerra o turno, sem monitorar; (3) quando o Filipe avisa que fez o merge ou trabalhou sozinho, lê o repo e resume em poucas linhas o que foi feito; (4) visão de produto sobre o que foi implementado, só se ele pedir.
+- **Reviewer de Projetos (bot):** só quando o Filipe pede, para um merge mais complicado: abre uma thread no T3 com o Claude para revisar o PR e resume o veredito. Nunca faz merge nem apaga branch.
 
-**Threads do T3 por issue.**
-- **Nome:** toda thread se chama `ISSUEID-descrição concisa da issue` (ex.: `P1-03-cadastro de contas`), definido no `--title` ao abrir. Sem issue (ajuste avulso pedido pelo Filipe), use um id curto que ele reconheça.
-- **Uma thread por issue, do plano à implementação:** quando o PO planeja uma issue numa thread, ele passa o id da thread (`mcp:...`) na entrega do plano. O dev responsável manda a implementação nessa mesma thread (`t3 thread send`), saindo do modo plano, para o modelo manter o contexto. Se a thread do plano não tiver a branch da issue, o dev pede ao Claude, na própria thread, para criar a branch antes de mexer no código. As correções das rodadas de revisão também vão nessa thread. Só abra thread nova se não houver thread de plano para a issue.
+## Threads no T3
+- Nome: `ISSUEID-descrição concisa da issue` (ex.: `P1-03-cadastro de contas`), no `--title`. Revisão: `ISSUEID-review PR#N`.
+- CLI no WSL do Filipe-PC (machine `27c5d105-4db7-4ebd-a284-8388b26659f5`): rode via PowerShell com `($s -replace "`r","") | wsl.exe -d Ubuntu -- bash -l`. Abra com o prompt como argumento posicional, nunca por stdin `-`:
+  `t3 thread start --title '<nome>' --provider claudeAgent --model claude-opus-5-5 -- <projeto> "$(cat prompt.md)"`. Use `t3 project list` para achar o projeto e `t3 thread show <id>` para ler o resultado.
+- O prompt de implementação diz ao Claude: seguir o `AGENTS.md` do repo e a skill `issue-cycle`; planejar, implementar numa branch nova a partir da `main` atualizada, rodar os checks/testes, commitar, dar push da branch e abrir o PR com resumo; não fazer merge. Exceção: no `open-data-platform`, commits convencionais na `main` local, sem push (o Filipe publica).
+- Depois de abrir a thread, o bot mostra o comando e o id e **encerra o turno**. Não fica esperando nem cria rotina para vigiar thread.
 
-**Esperar uma thread do T3 terminar (obrigatório).** Logo depois de abrir ou mandar mensagem numa thread pelo CLI `t3`:
-1. Chame `t3_thread_wait` do conector `user-t3code` com `environmentId` `3e25557f-d7d0-4911-b1eb-23a277ab952d`, o `threadId` (`mcp:...`) e `timeoutMs: 600000` (10 min, fixo; não use valores maiores).
-2. Se voltar timeout sem `next`, chame de novo na hora, com os mesmos parâmetros, até a thread terminar.
-3. Só encerre o turno no meio da espera se a resposta trouxer `next`. Nunca encerre o turno dizendo "ainda está rodando" sem uma espera ativa; o Filipe não deve precisar perguntar se acabou.
-4. Quando terminar, leia o resultado com `t3 thread show <id>` e entregue logo (passo 3 do ciclo).
-
-**Ciclo.**
-1. **PO planeja** só quando o Filipe pede, numa thread do T3, sem mexer em código. O plano só vale com aprovação explícita do Filipe. A entrega do plano cita o id da thread.
-2. **Dev implementa** só quando o Filipe manda, no chat do dev, na thread do plano da issue quando houver. Uma issue ou fase por vez, em branch com PR. A ordem de implementar já autoriza commitar, dar push da branch, abrir o PR e analisar o CI. Exceção: no `open-data-platform`, commits convencionais locais direto na `main`, sem push.
-3. **Dev entrega** quando o CI do PR foi analisado (no `open-data-platform`, os checks locais): sinaliza ao PO e ao Reviewer que está pronto (o que fez, PR ou hash, CI e checks, pontos em aberto, e se a mudança é pequena ou grande) e avisa o Filipe.
-4. **Aprovação dupla:** PO e Reviewer revisam o PR depois desse sinal e aprovam a mesma versão (head do PR; no `open-data-platform`, o hash do último commit local). Qualquer objeção bloqueia.
-   - **Rodada** = uma entrega sinalizada. Cada correção é feita com novos commits, CI analisado de novo e novo sinal aos dois. Após duas rodadas de divergência, o Filipe decide.
-   - **Mudança pequena** (docs, texto, ajuste de config, bump patch de dependência, ou bugfix contido de até ~50 linhas em até 3 arquivos, sem tocar arquitetura, modelo de dados/schema, auth/segurança, infra/deploy, API pública ou lógica de pipeline; na dúvida, é grande): o dev classifica na entrega; basta o PO aprovar. O Reviewer não revisa, só faz o merge (passo 5).
-5. **Publicação:** merge, exclusão de branch e pipelines de CD são do Reviewer, sempre após o sim explícito do Filipe. O Filipe também pode fazer ele mesmo ou ordenar que um bot específico faça; com essa ordem, aquele bot pode. No `open-data-platform`, o push na `main` segue esta mesma regra.
-   - Exceção declarada: no `pedsletter`, PRs de conteúdo (`src/content/posts/`) entram pelo merge automático do workflow quando a validação passa.
-6. **Pós-merge:** o Reviewer avisa o PO, que atualiza o backlog e propõe o próximo passo ao Filipe.
-
-**Sempre.**
-- Mostre ao Filipe os comandos que rodou e as saídas.
-- Peça aprovação antes de comando de rede, Git permanente, exclusão de arquivo ou abertura de porta. Já autorizados pela ordem de implementar: commit, push da branch da issue, abertura do PR e leitura do CI pelo dev.
-- Só acorde outro bot quando ele precisar agir, quando alguém esperar a resposta dele ou para repassar uma regra do Filipe.
+## Sempre
+- Respostas curtas. Status = fase, issue atual, PRs abertos, último merge e próximo passo, em poucas linhas.
+- Mostre ao Filipe os comandos que rodou e as saídas relevantes, resumidas.
+- Abrir thread no T3 e comandos de rede ou Git permanente pedem aprovação pelo card.
+- Economize uso do Grok: leia só o necessário (git log, `gh pr list`, `PROJECT_STATUS.md`/`ROADMAP.md`), não leia diffs inteiros sem pedido e não acorde outros bots.
