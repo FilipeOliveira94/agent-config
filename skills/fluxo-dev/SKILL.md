@@ -23,7 +23,7 @@ Modelo simples: o Claude no T3 Code faz o trabalho, o Filipe revisa e faz o merg
 - Nome: `ISSUEID-descrição concisa da issue` (ex.: `P1-03-cadastro de contas`), no `--title`. Revisão: `ISSUEID-review PR#N`.
 - CLI no WSL do Filipe-PC (machine `27c5d105-4db7-4ebd-a284-8388b26659f5`): rode via PowerShell com `($s -replace "`r","") | wsl.exe -d Ubuntu -- bash -l`. Abra com o prompt como argumento posicional, nunca por stdin `-`:
   `t3 thread start --title '<nome>' --provider claudeAgent --model claude-opus-5-5 -- <projeto> "$(cat prompt.md)"`. Use `t3 project list` para achar o projeto e `t3 thread show <id>` para ler o resultado.
-- O prompt de implementação diz ao Claude: seguir o `AGENTS.md` do repo e a skill `issue-cycle`; o modo da tarefa (pequena: planejar e implementar direto; grande: planejar, apresentar o plano e parar até a aprovação); planejar, implementar numa branch nova a partir da `main` atualizada, rodar os checks/testes, commitar, dar push da branch e abrir o PR com resumo; não fazer merge. Exceção: no `open-data-platform`, commits convencionais na `main` local, sem push (o Filipe publica).
+- O prompt de implementação diz ao Claude: seguir o `AGENTS.md` do repo e a skill `issue-cycle`; o modo da tarefa (pequena: planejar e implementar direto; grande: planejar, apresentar o plano e parar até a aprovação); planejar, implementar numa branch nova a partir da `main` atualizada, rodar os checks/testes, commitar, dar push da branch e abrir o PR com resumo; não fazer merge. Vale para todos os projetos, inclusive o `open-data-platform`.
 - Depois de abrir a thread, o bot mostra o comando e o id e **encerra o turno**. Não fica esperando nem cria rotina para vigiar thread.
 
 ## Sempre
