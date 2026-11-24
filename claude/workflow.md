@@ -1,70 +1,93 @@
 # Dev workflow and model policy
 
-Filipe's main development flow, in force since 2026-11-24. Every Claude Code session loads this file through `~/.claude/CLAUDE.md`. Each project's `AGENTS.md` has an "Agent workflow" section with its profile, extra reviewers and exceptions; where that section is more specific, it wins. The per-issue procedure is the `issue-cycle` skill.
+Filipe's main development flow, in force since 2026-11-24. Every Claude Code session loads this file through `~/.claude/CLAUDE.md`. Each project's `AGENTS.md` has an "Agent workflow" section with its profile, language, High-risk areas, extra reviewers and exceptions; where that section is more specific, it wins. The per-issue procedure is the `issue-cycle` skill.
+
+## Language
+
+- Filipe may write in Portuguese or English. Reply in English.
+- Code, identifiers, comments, docs, ADRs, issues, commit messages, PR titles and descriptions, and agent files are in English.
+- This holds in every project, current and future, unless the project's "Agent workflow" block names another language for a scope (for example "site content: pt-BR").
+- Product content (site text, UI strings, published posts) follows the project's own rules. It is content, not documentation.
+- A repository that still has Portuguese docs keeps each file in one language: edit a file in its current language until the project's translation issue converts it.
 
 ## Roles
 
 | Role | Who | Does |
 | --- | --- | --- |
-| Owner | Filipe | Picks the issue, approves the plan of a large task, reviews the PR, merges it and deletes the branch. |
-| Dev | Claude Opus 5.5 in T3 Code, one thread per issue | Plans, implements on a new branch from an up-to-date `main`, runs the checks and the review gates, commits, pushes the branch and opens the PR. |
-| PO reviewer | `po-reviewer` subagent (Sonnet 5.5) | Checks a large task's plan, and the finished branch, against the issue's acceptance criteria and scope. |
+| Owner | Filipe | Picks the issue, approves plans, reviews the PR, merges it and deletes the branch. Confirms any switch to Fable. |
+| Dev | Claude Opus 5.5 in T3 Code, one thread per issue | Rates and plans the issue, implements on a new branch from an up-to-date `main`, runs the checks and the review gates, commits, pushes the branch and opens the PR. |
+| PO reviewer | `po-reviewer` subagent (Sonnet 5.5) | Checks plans and finished branches against the issue's acceptance criteria, scope and rating. |
 | Code reviewer | `code-reviewer` subagent (Sonnet 5.5) | Checks the finished branch for bugs, security issues and regressions. |
 
-No agent merges, deletes a branch, pushes `main` or deploys. There are no PO or Reviewer bots.
+No agent merges, deletes a branch, pushes `main` or deploys. There are no PO or Reviewer bots, and no fallback to another provider.
 
-Fallback when the Claude limit runs out: Grok 4.7 through the Cursor provider in T3. Subagents don't run there, so the PR lists the gates that were skipped.
+## Size and risk
 
-## Task size
+Every issue carries two ratings. Size is how much work it is; Risk is how costly a mistake in it would be. They are independent: a small change can be High risk.
 
-- **Small:** docs, text, a config tweak, a patch dependency bump, or a contained bugfix of up to ~50 lines in up to 3 files that touches none of: architecture, data model or schema, auth or security, infra or deploy, public API, pipeline logic. Plan and implement straight through to the PR.
-- **Large:** everything else, or when in doubt. Plan and stop: present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments he sends with the approval.
-- Filipe's prompt says which mode applies. If planning shows a small task is bigger, reclassify it as large, say why and stop. Never reclassify large as small.
-- State the classification again in the PR.
-- A project's `AGENTS.md` may refine these criteria; its version wins.
+| Size | Meaning |
+| --- | --- |
+| S | About one session; up to ~400 hand-written lines (code and tests, not lockfiles, generated code or docs); one module or area |
+| M | One to two sessions; ~400 to 1,000 lines, or many small files; may add a migration, endpoints, a screen, a pipeline step or a CI workflow |
+| L | More than two sessions or over ~1,000 lines; several modules, a new engine or pipeline, several screens. The plan says whether to split it first |
+
+| Risk | Meaning |
+| --- | --- |
+| Low | No money, schema, auth, secrets, personal data, deploy or production data; a mistake is visible and cheap to fix: docs, tooling, UI over an existing API, charts |
+| Med | New schema, endpoints, parsers, pipeline logic, CI, local or dev infra; a mistake is caught by the standard tests |
+| High | A mistake is silent or costly: a project hard rule, money math, authorization, secrets or crypto, personal data or LLM egress, deploy or publishing, production data, compliance or legal text, billing |
+
+- The project's "Agent workflow" block says what counts as High there. Its roadmap keeps the ratings.
+- An issue without a rating gets one in the plan, with one line of reasoning. Record it in the roadmap in the same PR.
+- Raise a rating when planning shows more work or risk, and say why. Never lower one without Filipe.
+- State the rating in the PR. When the issue closes, record its actual size where the project keeps ratings.
+
+## What the rating decides
+
+| Rating | Plan | Review gates (profile `reviewed`) | Starting effort |
+| --- | --- | --- | --- |
+| S + Low | Plan and implement straight through to the PR | `code-reviewer` | Opus medium |
+| S + Med, M + Low, M + Med | Plan, then stop for Filipe's approval | `po-reviewer` on the plan; `code-reviewer`, then `po-reviewer` on the finished branch | Opus medium |
+| Any High | Plan, then stop. The plan names the hard rules at stake and the tests written first | As above, plus the extra reviewers whose trigger matches | Opus high |
+| Any L | Plan, then stop. The plan proposes a split first | As above | Opus high |
+
+- A change that is only docs or text skips `code-reviewer`.
+- Profile `solo` uses the Plan and effort columns and skips the review gates.
+- Approval arrives in the same thread, sometimes with adjustments. Apply them before implementing.
 
 ## Profiles
 
-- **reviewed:** the review gates below apply.
-- **solo:** no reviewer subagents. Opus 5.5 plans and implements.
-- **No "Agent workflow" section** (a new project): before the first task, ask Filipe for the profile, the extra reviewers and any model exceptions, and propose the block from `~/.agents/claude/templates/agent-workflow.md`. Do not start the task until the block is in `AGENTS.md`.
+- **reviewed:** the review gates apply.
+- **solo:** no reviewer subagents. Opus 5.5 only; Fable only when Filipe asks for it.
+- **No "Agent workflow" section** (a new project): before the first task, ask Filipe for the profile, language, High-risk areas, extra reviewers and any model exceptions, and propose the block from `~/.agents/claude/templates/agent-workflow.md`. Do not start the task until the block is in `AGENTS.md`.
 
-## Review gates (profile `reviewed`)
+## Reviewers
 
-| Task | Before Filipe sees the plan | Before opening the PR |
-| --- | --- | --- |
-| Small, docs or text only | none | none |
-| Small, code or config | none | `code-reviewer` |
-| Large | `po-reviewer`, mode `plan` | `code-reviewer`, then `po-reviewer`, mode `acceptance` |
-
-- Also run the extra reviewers the project's "Agent workflow" section lists, when their trigger matches.
-- Review the finished branch, not each edit.
-- Fix every critical issue and every NOT MET criterion, then run that reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe instead of looping.
+- Global reviewers live in agent-config's `claude/agents/` and are linked into `~/.claude/agents/`.
+- A project's extra reviewers are subagent files in its own `.claude/agents/`, committed with the repo. The "Agent workflow" block names each one and when it runs. A project file with the same name as a global reviewer replaces it in that project, as aconta's `code-reviewer` does.
+- Review the finished branch, not each edit. Fix every critical issue and every NOT MET criterion, then run that reviewer again. If the same finding is still open after 2 rounds, escalate (Model policy).
 - When `po-reviewer` returns NEEDS FILIPE, put the question in the plan or the PR. Do not decide it yourself.
 - Show `po-reviewer`'s verdict with the plan. Put each reviewer's final verdict in the PR description.
-- Never override a reviewer's model with the Agent tool's `model` parameter.
+- Reviewers always run on Sonnet 5.5. Never override their model with the Agent tool's `model` parameter.
 
 ## Model policy
 
-| Work | Model | Effort |
+| Model | When | Who decides |
 | --- | --- | --- |
-| Plans | Opus 5.5 | medium |
-| Implementation | Opus 5.5 | medium |
-| Reviewer subagents | Sonnet 5.5, set in each agent's frontmatter | set per agent |
-| Solo projects | Opus 5.5 for everything | medium |
+| Opus 5.5, medium effort | Default for plans and implementation | Default |
+| Opus 5.5, high effort | High risk or L size; or stuck: the same blocking finding after 2 fix rounds, or two failed hypotheses | The dev, without asking; it says so in the thread |
+| Fable 5.2, high effort | Opus high is still stuck: the same blocking finding after 2 more rounds, Filipe rejected a plan twice on substance, or two more failed hypotheses | Filipe confirms first |
+| Sonnet 5.5 | Reviewer subagents, set in their frontmatter | Fixed |
 
-The dev does not change its own model or effort. It recommends an escalation and Filipe decides: Opus medium, then Opus high (raise the thread's effort), then Fable 5.2.
-
-Fable 5.2 is the exception, never the default. Aim for at most 10% of plans and almost no implementation.
-- Only with Filipe's explicit OK. Never start a Fable thread or subagent yourself. When a trigger fires, stop, name the trigger and recommend the next step.
-- Triggers: Filipe rejected an Opus plan twice on substance (not scope tweaks); the same blocking finding survived 2 fix rounds at high effort; a bug hunt tested two hypotheses and found no new evidence.
-- Not triggers: issue size (split the issue instead), importance, a first failed attempt.
-- Preferred shape: a Fable thread writes or fixes the plan, and an Opus thread implements it. Fable implements only when Filipe asks for that by name.
-- Follow any model exceptions in the project's "Agent workflow" section.
+- Ask for Fable by naming the trigger. Never switch to Fable, or start a Fable subagent, without Filipe's yes. Size or importance alone is not a trigger: split the issue instead. Aim for Fable on at most 10% of issues.
+- Once on Fable, the thread stays on Fable until the dev decides the hard part is done (plan settled, blocker fixed). Then it switches back to Opus 5.5 and says why. If Fable's usage limit is reached while Opus still has quota, switch to Opus 5.5 high and continue.
+- Drop from Opus high back to medium when the hard part is done.
+- How to switch in a T3 thread: load `mcp__t3-code__t3_thread_configure` with ToolSearch and call it with no `threadId` and `modelSelection: {instanceId: "claudeAgent", model: "claude-opus-5-5", options: [{id: "effort", value: "high"}]}`; for Fable, `model: "claude-fable-5-2"`. The change applies from the thread's next turn, so switch at the end of a turn, for example when presenting the plan. Outside T3, ask Filipe to run `/model` or `/effort`.
+- Each switch reads the conversation once without the prompt cache. Switch for a reason, not back and forth.
+- Follow any model exceptions in the project's "Agent workflow" block.
 
 ## T3 threads
 
 - One thread per issue, titled `ISSUEID-short description` (for example `P1-03-account signup`).
 - Start one from WSL: `t3 thread start --title '<title>' --provider claudeAgent --model claude-opus-5-5 -- <project> "$(cat prompt.md)"`. Pass the prompt as an argument, not on stdin. `t3 project list` finds the project; `t3 thread show <id>` reads the result.
-- A Fable thread, after Filipe's OK: the same command with `--model claude-fable-5-2` and the title `ISSUEID-fable plan`.
-- The prompt names the issue and the mode (small or large), and says to follow the repo's `AGENTS.md` and the `issue-cycle` skill.
+- The prompt names the issue and its rating when the roadmap has one, and says to follow the repo's `AGENTS.md` and the `issue-cycle` skill.
