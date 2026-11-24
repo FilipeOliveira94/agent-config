@@ -24,7 +24,7 @@ The script is safe to re-run; run it again after a pull that adds or removes a s
 - links each skill into `~/.claude/skills/` and `~/.cursor/skills/`, and removes links there that point at skills this repo no longer has;
 - links each subagent into `~/.claude/agents/`;
 - adds `@~/.agents/claude/workflow.md` to `~/.claude/CLAUDE.md`;
-- merges `claude/settings.fragment.json` into `~/.claude/settings.json`, after a timestamped backup. That file is merged, not linked, because `/model` and `/effort` rewrite it.
+- adds the keys of `claude/settings.fragment.json` that `~/.claude/settings.json` does not have yet, after a timestamped backup. It never overwrites a value, so a model or effort set with `/model` or `/effort` stays. The file is merged, not linked, because Claude Code rewrites it.
 
 Keep the clone at `~/.agents`, on `main` or on a branch that has these files; the links point into the working tree.
 

@@ -7,7 +7,7 @@ CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CURSOR_SKILLS="$HOME/.cursor/skills"
 
 if [ "$REPO" != "$HOME/.agents" ]; then
-  echo "warning: the repo is at $REPO, not ~/.agents; Codex reads ~/.agents/skills" >&2
+  echo "warning: the repo is at $REPO, not ~/.agents. The projects' AGENTS.md files and Codex refer to ~/.agents; clone it there." >&2
 fi
 
 link() {  # link <target> <link path>
@@ -61,33 +61,38 @@ if ! grep -qxF "$IMPORT" "$CLAUDE_HOME/CLAUDE.md"; then
   echo "added $IMPORT to $CLAUDE_HOME/CLAUDE.md"
 fi
 
-# Default model and effort, merged into settings.json (not linked: /model and /effort rewrite it)
+# Default model and effort, added to settings.json only where a key is missing, so a value set with
+# /model or /effort is never overwritten. Not linked: Claude Code rewrites this file.
 SETTINGS="$CLAUDE_HOME/settings.json"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 python3 - "$SETTINGS" "$REPO/claude/settings.fragment.json" <<'PY'
 import copy, json, shutil, sys, time
 
 path, frag_path = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    current = json.load(f)
+try:
+    with open(path) as f:
+        current = json.load(f)
+except ValueError as err:
+    print(f"warning: {path} is not valid JSON ({err}); settings left unchanged", file=sys.stderr)
+    sys.exit(0)
 with open(frag_path) as f:
     fragment = json.load(f)
 
-def merge(base, extra):
+def add_missing(base, extra):
     for key, value in extra.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            merge(base[key], value)
-        else:
-            base[key] = value
+        if key not in base:
+            base[key] = copy.deepcopy(value)
+        elif isinstance(value, dict) and isinstance(base[key], dict):
+            add_missing(base[key], value)
     return base
 
-merged = merge(copy.deepcopy(current), fragment)
+merged = add_missing(copy.deepcopy(current), fragment)
 if merged == current:
-    print(f"{path} already has the settings fragment")
+    print(f"{path} already has every key of the settings fragment")
 else:
     shutil.copy2(path, f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
     with open(path, "w") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"merged the settings fragment into {path} (backup next to it)")
+    print(f"added the missing settings fragment keys to {path} (backup next to it)")
 PY

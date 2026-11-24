@@ -15,7 +15,7 @@ Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in
 
 - **S + Low:** plan and implement straight through to the PR.
 - **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
-- **High risk or L size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your own model or effort ("Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan says whether to split it.
+- **High risk or L size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your model or effort by yourself; a switch happens only when Filipe decides it ("Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan says whether to split it.
 - If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
 ## 1. Plan

@@ -56,7 +56,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 | Any High | Plan, then stop. The plan names the hard rules at stake and the tests written first | As above, plus the extra reviewers whose trigger matches | Opus high |
 | Any L | Plan, then stop. The plan says whether to split it | As above | Opus high |
 
-- A change that is only docs or text skips `code-reviewer`.
+- A change that is only docs or text skips `code-reviewer`, in every project. A project's "Skip review" line adds kinds of PR that skip all gates.
 - Profile `solo` uses the Plan and effort columns and skips the review gates.
 - The thread effort is set when the thread starts (Model policy). If the dev finds itself on medium for a High or L issue, it says so at the top of the plan.
 - Approval arrives in the same thread, sometimes with adjustments. Apply them before implementing.
@@ -85,7 +85,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 | Fable 5.2, high effort | Opus is stuck: the same blocking finding after 2 fix rounds, Filipe rejected a plan twice on substance, or two failed hypotheses | Filipe, after the dev asks |
 | Sonnet 5.5 | Reviewer subagents | Fixed in their frontmatter |
 
-- The dev never changes its own model or effort mid-thread. Every switch makes the next request re-read the whole conversation without the prompt cache, and the dev cannot tell in advance whether a cheaper setting would win that back. When a switch looks useful (the rating rose to High or L on a medium thread, or a Fable trigger fired), the dev says so and Filipe decides.
+- The dev never switches its model or effort by itself. Every switch makes the next request re-read the whole conversation without the prompt cache, and the dev cannot tell in advance whether a cheaper setting would win that back. When a switch looks useful (the rating rose to High or L on a medium thread, or a Fable trigger fired), the dev says so. A switch happens only when Filipe decides it; the dev may then carry it out.
 - Ask for Fable by naming the trigger. Never start a Fable thread or subagent without Filipe's yes. Size or importance alone is not a trigger. Aim for Fable on at most 10% of issues.
 - On Filipe's yes, switch the thread to Fable 5.2 at high effort and end the turn; the next turn runs on Fable. In a T3 thread, load `mcp__t3-code__t3_thread_configure` with ToolSearch and call it with no `threadId` and `modelSelection: {instanceId: "claudeAgent", model: "claude-fable-5-2", options: [{id: "effort", value: "high"}]}`. Outside T3, ask Filipe to run `/model`.
 - When a thread on Fable presents a plan, ask with it: implement on Fable, or switch to Opus 5.5 for the implementation? Filipe decides when he approves the plan. On "Opus", switch the thread the same way with `model: "claude-opus-5-5"` and the issue's effort, and end the turn.

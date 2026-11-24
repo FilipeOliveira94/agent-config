@@ -35,7 +35,7 @@ Use Bash for reading only: `git diff`, `git log`, `git status`, `git show`. Neve
 
 ## Acceptance mode
 
-Read the change with `git diff <base>...HEAD`, plus `git status --porcelain` for uncommitted and untracked files.
+Read the whole change: `git diff <base>...HEAD`, `git diff HEAD` for uncommitted changes, and `git status --porcelain`, reading untracked files in full.
 
 For each acceptance criterion, decide MET, NOT MET or UNVERIFIED and cite the evidence: a test, a command output the caller reported, or a `file:line`. A criterion with no evidence is UNVERIFIED, not MET. Then check scope as in plan mode.
 

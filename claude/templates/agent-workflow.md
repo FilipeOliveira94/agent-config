@@ -6,7 +6,7 @@ Language, size and risk, review gates and model policy: `~/.agents/claude/workfl
 - **Language:** English for everything (default); name any scope that uses another language, for example "site content: pt-BR"
 - **High risk here:** what makes an issue High in this project, beyond the general list
 - **Extra reviewers:** (reviewed only) `<agent>` from `.claude/agents/`, when `<paths or topics>`; or "none"
-- **Skip review:** `<kinds of PR that skip the gates>`, or "none"
+- **Skip review:** `<kinds of PR that skip all gates>`, or "none" (docs-only changes always skip `code-reviewer`)
 - **Model exceptions:** for example "Fable allowed for P3 parser plans", or "none"
 
 <!-- Examples
