@@ -1,6 +1,6 @@
 # Dev workflow and model policy
 
-Filipe's main development flow, in force since 2026-11-23. Every Claude Code session loads this file through `~/.claude/CLAUDE.md`. Each project's `AGENTS.md` has an "Agent workflow" section with its profile, extra reviewers and exceptions; where that section is more specific, it wins. The per-issue procedure is the `issue-cycle` skill.
+Filipe's main development flow, in force since 2026-11-24. Every Claude Code session loads this file through `~/.claude/CLAUDE.md`. Each project's `AGENTS.md` has an "Agent workflow" section with its profile, extra reviewers and exceptions; where that section is more specific, it wins. The per-issue procedure is the `issue-cycle` skill.
 
 ## Roles
 
