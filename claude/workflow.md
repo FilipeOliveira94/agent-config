@@ -38,13 +38,14 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 | High | A mistake is silent or costly: a project hard rule, money math, authorization, secrets or crypto, personal data or LLM egress, deploy or publishing, production data, compliance or legal text, billing |
 
 - The project's "Agent workflow" block says what counts as High there.
-- Roadmaps record ratings as `Size/Risk` (for example `M/High`) in two columns of the issue tables:
-  - **Expected:** the rating estimated before the work.
-  - **Seen:** the rating observed when the issue closed.
-  - A new issue gets Expected, with `-` in Seen until it closes. An issue that closed before ratings existed gets only Seen, with `-` in Expected.
-- An issue without a rating gets one in the plan, with one line of reasoning; record it as Expected in the same PR. Until a roadmap has these columns, the plan and the PR state the rating.
+- Roadmap issue tables carry two rating columns. Each cell is `expected/seen`: the estimate before the work, then what the work turned out to be.
+  - **Expected/Seen Risk:** `Lo`, `Med` or `Hi` (Low, Med, High).
+  - **Expected/Seen Size:** `Sm`, `Md` or `Lg` (S, M, L).
+  - A new issue has only the expected half (`Med/-`, `Md/-`); the seen half is filled when it closes (`Med/Hi`, `Md/Lg`). An issue closed before ratings existed has only the seen half (`-/Lo`, `-/Sm`). A withdrawn issue has `-/-`.
+  - Example row: `| P1-03 | Create website | ... | Lo/- | Md/- | ... |`.
+- An issue without a rating gets one in the plan, with one line of reasoning; record the expected half in the same PR. Until a roadmap has these columns, the plan and the PR state the rating.
 - Raise a rating when planning shows more work or risk, and say why. Never lower one without Filipe.
-- State the rating in the PR. When the issue closes, fill in Seen.
+- State the rating in the PR. When the issue closes, fill in the seen half.
 
 ## What the rating decides
 

@@ -11,7 +11,7 @@ Cycle: rate size and risk → plan → (above S + Low: `po-reviewer` on the plan
 
 ## Size and risk
 
-Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the roadmap's Expected rating; if there is none, estimate it in the plan with one line of reasoning and record it as Expected in the same PR (format in `workflow.md`). The rating decides:
+Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the expected half of the roadmap's "Expected/Seen Risk" and "Expected/Seen Size" columns; if there is none, estimate it in the plan with one line of reasoning and record the expected half in the same PR (format in `workflow.md`). The rating decides:
 
 - **S + Low:** plan and implement straight through to the PR.
 - **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
@@ -50,7 +50,7 @@ Fix the critical findings and the NOT MET criteria and run the reviewer again. I
 
 Conventional commits, push of the branch and a PR with a summary:
 - what was done and how it meets the acceptance;
-- the rating (Size and Risk) and whether it changed along the way; when the PR closes the issue, the Seen rating goes in the roadmap;
+- the rating (Size and Risk) and whether it changed along the way; when the PR closes the issue, fill the seen half of both columns in the roadmap;
 - checks and tests run, with the relevant output;
 - each reviewer's final verdict, or which gates were skipped and why;
 - what stays open or was left out.
