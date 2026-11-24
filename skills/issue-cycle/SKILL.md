@@ -22,7 +22,7 @@ Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in
 
 Read the issue, the acceptance, the rating, the project status (`PROJECT_STATUS.md`/`ROADMAP.md`) and the "Agent workflow" section of `AGENTS.md`, without changing files. If the project has no such section, stop and ask Filipe to define it ("Profiles" in `workflow.md`). Define scope, out of scope, approach, risks and what a person can do once it is done.
 
-Above S + Low in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above S + Low, this plan is what goes for approval: end the turn here.
+Above S + Low in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above S + Low, this plan is what goes for approval: end the turn here. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
 
 ## 2. Implement
 

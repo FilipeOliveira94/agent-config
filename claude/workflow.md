@@ -87,7 +87,8 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 - The dev never changes its own model or effort mid-thread. Every switch makes the next request re-read the whole conversation without the prompt cache, and the dev cannot tell in advance whether a cheaper setting would win that back. When a switch looks useful (the rating rose to High or L on a medium thread, or a Fable trigger fired), the dev says so and Filipe decides.
 - Ask for Fable by naming the trigger. Never start a Fable thread or subagent without Filipe's yes. Size or importance alone is not a trigger. Aim for Fable on at most 10% of issues.
 - On Filipe's yes, switch the thread to Fable 5.2 at high effort and end the turn; the next turn runs on Fable. In a T3 thread, load `mcp__t3-code__t3_thread_configure` with ToolSearch and call it with no `threadId` and `modelSelection: {instanceId: "claudeAgent", model: "claude-fable-5-2", options: [{id: "effort", value: "high"}]}`. Outside T3, ask Filipe to run `/model`.
-- Once on Fable, the thread stays on Fable until it ends. If Fable's usage limit is reached, the thread moves to Opus 5.5 high; if the thread stopped on the limit, Filipe switches it.
+- When a thread on Fable presents a plan, ask with it: implement on Fable, or switch to Opus 5.5 for the implementation? Filipe decides when he approves the plan. On "Opus", switch the thread the same way with `model: "claude-opus-5-5"` and the issue's effort, and end the turn.
+- Otherwise the thread stays on Fable until it ends. If Fable's usage limit is reached, the thread moves to Opus 5.5 high; if the thread stopped on the limit, Filipe switches it.
 - Follow any model exceptions in the project's "Agent workflow" block.
 
 ## T3 threads
