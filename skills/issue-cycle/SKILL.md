@@ -1,58 +1,58 @@
 ---
 name: issue-cycle
-description: "Leva uma issue (ou fase) do plano até o PR aberto para o Filipe revisar e fazer o merge. Use quando citarem uma issue, um critério de aceite, uma feature a construir, ou pedirem para planejar, implementar, verificar ou abrir o PR de uma issue."
+description: "Takes an issue (or phase) from plan to an open PR for Filipe to review and merge. Use when someone cites an issue, an acceptance criterion or a feature to build, or asks to plan, implement, verify or open the PR for an issue."
 ---
 
-# Ciclo de issue
+# Issue cycle
 
-Uma issue ou fase por vez. O texto de aceite é a definição de pronto: não puxe issues futuras e não mude o aceite durante a construção. As regras gerais (idioma, papéis, tamanho e risco, gates de revisão e política de modelos) estão em `~/.agents/claude/workflow.md`; o `AGENTS.md` do repositório prevalece no que for específico do projeto, inclusive a seção "Agent workflow".
+One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Ciclo: avaliar tamanho e risco → plano → (acima de S + Low: `po-reviewer` no plano, no perfil `reviewed`, e aprovação do Filipe) → implementação numa branch nova a partir da `main` atualizada → checks/testes → gates de revisão → commit, push da branch e PR com resumo. O merge é sempre do Filipe: o agente nunca faz merge nem apaga branch.
+Cycle: rate size and risk → plan → (above S + Low: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch and PR with a summary. The merge is always Filipe's: the agent never merges and never deletes a branch.
 
-## Tamanho e risco
+## Size and risk
 
-Toda issue tem Size (S, M, L) e Risk (Low, Med, High), na escala do `workflow.md`. Use a nota do roadmap; se não houver, estime no plano com uma linha de justificativa e registre no roadmap no mesmo PR. A nota decide:
+Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the roadmap's rating; if there is none, estimate it in the plan with one line of reasoning and record it in the roadmap in the same PR. The rating decides:
 
-- **S + Low:** planeje e implemente direto até o PR.
-- **Qualquer outra:** planeje e **pare**. Apresente o plano na thread e espere a aprovação do Filipe antes de mexer em código. Incorpore os ajustes que vierem com a aprovação.
-- **Risk High ou Size L:** comece em Opus high (você mesmo troca o esforço da thread; ver "Model policy" no `workflow.md`). Em High, o plano nomeia as regras críticas em jogo e os testes escritos primeiro; em L, o plano propõe a divisão antes.
-- Se, ao planejar, a issue se mostrar maior ou mais arriscada, suba a nota, diga por quê e siga o modo novo. Nunca baixe uma nota sem o Filipe.
+- **S + Low:** plan and implement straight through to the PR.
+- **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
+- **High risk or L size:** start at Opus high (you switch the thread's effort yourself; see "Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan proposes a split first.
+- If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
-## 1. Planejar
+## 1. Plan
 
-Leia a issue, o aceite, a nota, o status do projeto (`PROJECT_STATUS.md`/`ROADMAP.md`) e a seção "Agent workflow" do `AGENTS.md`, sem alterar arquivos. Se o projeto não tiver essa seção, pare e peça ao Filipe para defini-la ("Profiles" no `workflow.md`). Defina escopo, fora de escopo, abordagem, riscos e o que uma pessoa consegue fazer quando estiver pronto.
+Read the issue, the acceptance, the rating, the project status (`PROJECT_STATUS.md`/`ROADMAP.md`) and the "Agent workflow" section of `AGENTS.md`, without changing files. If the project has no such section, stop and ask Filipe to define it ("Profiles" in `workflow.md`). Define scope, out of scope, approach, risks and what a person can do once it is done.
 
-Acima de S + Low num projeto `reviewed`, rode o `po-reviewer` (modo `plan`) com o ID da issue, a nota e o plano, corrija o que ele apontar e mostre o veredito junto com o plano. Acima de S + Low, este plano é o que vai para aprovação: termine o turno aqui.
+Above S + Low in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above S + Low, this plan is what goes for approval: end the turn here.
 
-## 2. Implementar
+## 2. Implement
 
-Atualize a `main` (`git pull`) e crie uma branch nova a partir dela.
+Update `main` (`git pull`) and create a new branch from it.
 
-Faça a menor mudança que torna o comportamento aceito verdadeiro. Não acrescente confirmação, restrição ou passo que a issue não pediu. Ao extrair lógica repetida ou escolher fronteiras entre módulos, consulte a skill `code-structure`; a arquitetura existente do projeto prevalece.
+Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `code-structure` skill; the project's existing architecture prevails.
 
-## 3. Verificar
+## 3. Verify
 
-- Rode os checks e testes do projeto. Check não executado não é aprovação; registre comando e saída.
-- Exercite cada comportamento da issue como a pessoa usuária o faria. Comportamento não exercitado não está pronto; diga qual ficou de fora e por quê.
-- Um check interno verde não basta se a pessoa vê outra superfície. Olhe essa superfície.
+- Run the project's checks and tests. A check that was not run is not a pass; record the command and the output.
+- Exercise each behavior of the issue the way the user would. A behavior that was not exercised is not done; say which one was left out and why.
+- A green internal check is not enough if the user sees another surface. Look at that surface.
 
-## 4. Revisar (perfil `reviewed`)
+## 4. Review (profile `reviewed`)
 
-Com a branch pronta e os checks rodados:
+With the branch ready and the checks run:
 
-- `code-reviewer` em toda mudança de código ou config, com a branch base e o objetivo da mudança. Mudança só de docs ou texto pula este gate.
-- Os revisores extras que a seção "Agent workflow" listar, quando o gatilho bater. Eles ficam em `.claude/agents/` do projeto.
-- Acima de S + Low, depois do `code-reviewer`, o `po-reviewer` (modo `acceptance`) com o ID da issue, a nota, a branch base e os checks rodados com as saídas.
+- `code-reviewer` on every code or config change, with the base branch and the goal of the change. A docs-only or text-only change skips this gate.
+- The extra reviewers that the "Agent workflow" section lists, when their trigger matches. They live in the project's `.claude/agents/`.
+- Above S + Low, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
 
-Corrija os achados críticos e os critérios NOT MET e rode o revisor de novo. Se o mesmo achado continuar aberto depois de 2 rodadas, escale conforme a "Model policy" do `workflow.md`: Opus high por conta própria; Fable só com o sim do Filipe. Perfil `solo`: pule esta etapa.
+Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, escalate per the "Model policy" in `workflow.md`: Opus high on your own; Fable only with Filipe's yes. Profile `solo`: skip this step.
 
-## 5. Entregar
+## 5. Deliver
 
-Commits convencionais, push da branch e PR com resumo:
-- o que foi feito e como cumpre o aceite;
-- a nota (Size e Risk) e se mudou no caminho;
-- checks e testes rodados, com as saídas relevantes;
-- o veredito final de cada revisor, ou quais gates foram pulados e por quê;
-- o que segue aberto ou ficou de fora.
+Conventional commits, push of the branch and a PR with a summary:
+- what was done and how it meets the acceptance;
+- the rating (Size and Risk) and whether it changed along the way;
+- checks and tests run, with the relevant output;
+- each reviewer's final verdict, or which gates were skipped and why;
+- what stays open or was left out.
 
-Pare aí. Não faça merge, não apague a branch, não rode CD. Correções pedidas na revisão entram como novos commits na mesma branch.
+Stop there. Do not merge, do not delete the branch, do not run CD. Fixes requested in review go in as new commits on the same branch.
