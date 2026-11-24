@@ -11,11 +11,11 @@ Cycle: rate size and risk → plan → (above S + Low: `po-reviewer` on the plan
 
 ## Size and risk
 
-Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the roadmap's rating; if there is none, estimate it in the plan with one line of reasoning and record it in the roadmap in the same PR. The rating decides:
+Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the roadmap's Expected rating; if there is none, estimate it in the plan with one line of reasoning and record it as Expected in the same PR (format in `workflow.md`). The rating decides:
 
 - **S + Low:** plan and implement straight through to the PR.
 - **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
-- **High risk or L size:** start at Opus high (you switch the thread's effort yourself; see "Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan proposes a split first.
+- **High risk or L size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your own model or effort ("Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan says whether to split it.
 - If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
 ## 1. Plan
@@ -44,13 +44,13 @@ With the branch ready and the checks run:
 - The extra reviewers that the "Agent workflow" section lists, when their trigger matches. They live in the project's `.claude/agents/`.
 - Above S + Low, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
 
-Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, escalate per the "Model policy" in `workflow.md`: Opus high on your own; Fable only with Filipe's yes. Profile `solo`: skip this step.
+Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan ("Model policy" in `workflow.md`). Profile `solo`: skip this step.
 
 ## 5. Deliver
 
 Conventional commits, push of the branch and a PR with a summary:
 - what was done and how it meets the acceptance;
-- the rating (Size and Risk) and whether it changed along the way;
+- the rating (Size and Risk) and whether it changed along the way; when the PR closes the issue, the Seen rating goes in the roadmap;
 - checks and tests run, with the relevant output;
 - each reviewer's final verdict, or which gates were skipped and why;
 - what stays open or was left out.

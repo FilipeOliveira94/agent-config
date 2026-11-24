@@ -29,7 +29,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 | --- | --- |
 | S | About one session; up to ~400 hand-written lines (code and tests, not lockfiles, generated code or docs); one module or area |
 | M | One to two sessions; ~400 to 1,000 lines, or many small files; may add a migration, endpoints, a screen, a pipeline step or a CI workflow |
-| L | More than two sessions or over ~1,000 lines; several modules, a new engine or pipeline, several screens. The plan says whether to split it first |
+| L | More than two sessions or over ~1,000 lines; several modules, a new engine or pipeline, several screens. The plan says whether to split it |
 
 | Risk | Meaning |
 | --- | --- |
@@ -37,22 +37,27 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 | Med | New schema, endpoints, parsers, pipeline logic, CI, local or dev infra; a mistake is caught by the standard tests |
 | High | A mistake is silent or costly: a project hard rule, money math, authorization, secrets or crypto, personal data or LLM egress, deploy or publishing, production data, compliance or legal text, billing |
 
-- The project's "Agent workflow" block says what counts as High there. Its roadmap keeps the ratings.
-- An issue without a rating gets one in the plan, with one line of reasoning. Record it in the roadmap in the same PR.
+- The project's "Agent workflow" block says what counts as High there.
+- Roadmaps record ratings as `Size/Risk` (for example `M/High`) in two columns of the issue tables:
+  - **Expected:** the rating estimated before the work.
+  - **Seen:** the rating observed when the issue closed.
+  - A new issue gets Expected, with `-` in Seen until it closes. An issue that closed before ratings existed gets only Seen, with `-` in Expected.
+- An issue without a rating gets one in the plan, with one line of reasoning; record it as Expected in the same PR. Until a roadmap has these columns, the plan and the PR state the rating.
 - Raise a rating when planning shows more work or risk, and say why. Never lower one without Filipe.
-- State the rating in the PR. When the issue closes, record its actual size where the project keeps ratings.
+- State the rating in the PR. When the issue closes, fill in Seen.
 
 ## What the rating decides
 
-| Rating | Plan | Review gates (profile `reviewed`) | Starting effort |
+| Rating | Plan | Review gates (profile `reviewed`) | Thread effort |
 | --- | --- | --- | --- |
 | S + Low | Plan and implement straight through to the PR | `code-reviewer` | Opus medium |
 | S + Med, M + Low, M + Med | Plan, then stop for Filipe's approval | `po-reviewer` on the plan; `code-reviewer`, then `po-reviewer` on the finished branch | Opus medium |
 | Any High | Plan, then stop. The plan names the hard rules at stake and the tests written first | As above, plus the extra reviewers whose trigger matches | Opus high |
-| Any L | Plan, then stop. The plan proposes a split first | As above | Opus high |
+| Any L | Plan, then stop. The plan says whether to split it | As above | Opus high |
 
 - A change that is only docs or text skips `code-reviewer`.
 - Profile `solo` uses the Plan and effort columns and skips the review gates.
+- The thread effort is set when the thread starts (Model policy). If the dev finds itself on medium for a High or L issue, it says so at the top of the plan.
 - Approval arrives in the same thread, sometimes with adjustments. Apply them before implementing.
 
 ## Profiles
@@ -65,7 +70,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 
 - Global reviewers live in agent-config's `claude/agents/` and are linked into `~/.claude/agents/`.
 - A project's extra reviewers are subagent files in its own `.claude/agents/`, committed with the repo. The "Agent workflow" block names each one and when it runs. A project file with the same name as a global reviewer replaces it in that project, as aconta's `code-reviewer` does.
-- Review the finished branch, not each edit. Fix every critical issue and every NOT MET criterion, then run that reviewer again. If the same finding is still open after 2 rounds, escalate (Model policy).
+- Review the finished branch, not each edit. Fix every critical issue and every NOT MET criterion, then run that reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan.
 - When `po-reviewer` returns NEEDS FILIPE, put the question in the plan or the PR. Do not decide it yourself.
 - Show `po-reviewer`'s verdict with the plan. Put each reviewer's final verdict in the PR description.
 - Reviewers always run on Sonnet 5.5. Never override their model with the Agent tool's `model` parameter.
@@ -74,20 +79,20 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 
 | Model | When | Who decides |
 | --- | --- | --- |
-| Opus 5.5, medium effort | Default for plans and implementation | Default |
-| Opus 5.5, high effort | High risk or L size; or stuck: the same blocking finding after 2 fix rounds, or two failed hypotheses | The dev, without asking; it says so in the thread |
-| Fable 5.2, high effort | Opus high is still stuck: the same blocking finding after 2 more rounds, Filipe rejected a plan twice on substance, or two more failed hypotheses | Filipe confirms first |
-| Sonnet 5.5 | Reviewer subagents, set in their frontmatter | Fixed |
+| Opus 5.5, medium effort | Default for plans and implementation | Set when the thread starts |
+| Opus 5.5, high effort | Issues rated High risk or L size | Set when the thread starts, from the rating |
+| Fable 5.2, high effort | Opus is stuck: the same blocking finding after 2 fix rounds, Filipe rejected a plan twice on substance, or two failed hypotheses | Filipe, after the dev asks |
+| Sonnet 5.5 | Reviewer subagents | Fixed in their frontmatter |
 
-- Ask for Fable by naming the trigger. Never switch to Fable, or start a Fable subagent, without Filipe's yes. Size or importance alone is not a trigger: split the issue instead. Aim for Fable on at most 10% of issues.
-- Once on Fable, the thread stays on Fable until the dev decides the hard part is done (plan settled, blocker fixed). Then it switches back to Opus 5.5 and says why. If Fable's usage limit is reached while Opus still has quota, switch to Opus 5.5 high and continue.
-- Drop from Opus high back to medium when the hard part is done.
-- How to switch in a T3 thread: load `mcp__t3-code__t3_thread_configure` with ToolSearch and call it with no `threadId` and `modelSelection: {instanceId: "claudeAgent", model: "claude-opus-5-5", options: [{id: "effort", value: "high"}]}`; for Fable, `model: "claude-fable-5-2"`. The change applies from the thread's next turn, so switch at the end of a turn, for example when presenting the plan. Outside T3, ask Filipe to run `/model` or `/effort`.
-- Each switch reads the conversation once without the prompt cache. Switch for a reason, not back and forth.
+- The dev never changes its own model or effort mid-thread. Every switch makes the next request re-read the whole conversation without the prompt cache, and the dev cannot tell in advance whether a cheaper setting would win that back. When a switch looks useful (the rating rose to High or L on a medium thread, or a Fable trigger fired), the dev says so and Filipe decides.
+- Ask for Fable by naming the trigger. Never start a Fable thread or subagent without Filipe's yes. Size or importance alone is not a trigger. Aim for Fable on at most 10% of issues.
+- On Filipe's yes, switch the thread to Fable 5.2 at high effort and end the turn; the next turn runs on Fable. In a T3 thread, load `mcp__t3-code__t3_thread_configure` with ToolSearch and call it with no `threadId` and `modelSelection: {instanceId: "claudeAgent", model: "claude-fable-5-2", options: [{id: "effort", value: "high"}]}`. Outside T3, ask Filipe to run `/model`.
+- Once on Fable, the thread stays on Fable until it ends. If Fable's usage limit is reached, the thread moves to Opus 5.5 high; if the thread stopped on the limit, Filipe switches it.
 - Follow any model exceptions in the project's "Agent workflow" block.
 
 ## T3 threads
 
 - One thread per issue, titled `ISSUEID-short description` (for example `P1-03-account signup`).
 - Start one from WSL: `t3 thread start --title '<title>' --provider claudeAgent --model claude-opus-5-5 -- <project> "$(cat prompt.md)"`. Pass the prompt as an argument, not on stdin. `t3 project list` finds the project; `t3 thread show <id>` reads the result.
+- The `t3` CLI has no effort flag: a new thread takes the project's default model and effort in T3 (Opus 5.5, medium). For a High or L issue, pick high effort in the thread settings when starting it.
 - The prompt names the issue and its rating when the roadmap has one, and says to follow the repo's `AGENTS.md` and the `issue-cycle` skill.
