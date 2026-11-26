@@ -171,12 +171,6 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
   <section class="kpis" id="kpis" aria-label="Headline numbers"></section>
 
   <section class="card">
-    <h2>Waiting on you</h2>
-    <p class="sub">Open PRs to review and merge, plans waiting for approval, and questions without an answer</p>
-    <div id="waiting"></div>
-  </section>
-
-  <section class="card">
     <h2>By project</h2>
     <p class="sub">Outcome of every change in the period. Dependabot PRs are left out of the rates</p>
     <div class="legend" id="outcome-legend"></div>
@@ -186,7 +180,7 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
   <div class="grid2">
     <section class="card">
       <h2>Why work stopped for you</h2>
-      <p class="sub">Questions agents logged outside the planned approval gates, by reason</p>
+      <p class="sub">Stops for you outside the plan-approval gate, by reason, from each PR's "Questions and decisions"</p>
       <div id="asks-chart"></div>
       <div id="asks-list"></div>
     </section>
@@ -216,7 +210,7 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
       <dt>Clean merge</dt><dd>Merged with no commit written after the PR was up for review and no feedback round logged.</dd>
       <dt>Merge rate</dt><dd>Merged PRs out of merged plus closed-without-merging PRs.</dd>
       <dt>Rework commits</dt><dd>Commits written after the PR was up for review (a draft: after it was marked ready): review fixes, CI fixes, conflict merges. Counted by author date, so a rebase alone adds none.</dd>
-      <dt>Questions</dt><dd>Stops for you outside the planned plan-approval gate, logged with <code>change-ledger log ask</code>. Per change counts only changes agents started in the ledger.</dd>
+      <dt>Questions</dt><dd>Stops for you outside the plan-approval gate. Agents list each one, with its reason and your answer, under "Questions and decisions" in the PR text, and <code>change-ledger finish</code> records them. Per change counts only changes agents started in the ledger.</dd>
       <dt>Expected/Seen</dt><dd>The ledger's rating for the change, else the issue's rating in the roadmap on the default branch. <code>-</code> is a half not filled yet.</dd>
       <dt>Code lines</dt><dd>Lines added outside docs, lockfiles, generated files and binaries. Measured size: Sm up to 400, Md up to 1,000, Lg above (the scale in <code>workflow.md</code>).</dd>
       <dt>Stale</dt><dd>A PR open for more than <span id="stale-hours"></span> hours.</dd>
@@ -260,7 +254,6 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
   const NOW = Date.parse(D.generated);
   const hoursSince = (ts) => (ts ? (NOW - Date.parse(ts)) / 36e5 : 0);
   const fmtHours = (h) => (h === null || h === undefined ? "–" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`);
-  const fmtAge = (ts) => { const h = hoursSince(ts); return h < 1 ? `${Math.max(0, Math.round(h * 60))}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`; };
   const fmtDate = (ts) => {
     if (!ts) return "–";
     const d = new Date(ts);
@@ -371,63 +364,15 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
   }
 
   // ---------- sections
-  function renderKpis(s, waitingCount) {
+  function renderKpis(s) {
     const tiles = [
       ["PRs merged", String(s.merged), s.mergeRate === null ? "nothing finished yet" : `merge rate ${pct(s.merged, s.merged + s.closed)}`],
       ["Clean merges", s.cleanRate === null ? "–" : pct(s.clean, s.merged), s.merged ? `${s.clean} of ${s.merged} merged without rework` : "no merged PRs"],
       ["Median time to merge", fmtHours(s.medianHours), "from PR opened to merged"],
-      ["Questions per change", num(s.asksPerChange), s.agentChanges ? `${s.asks} on ${s.agentChanges} agent-started changes` : "none logged yet"],
-      ["Waiting on you", String(waitingCount), "PRs, plans and questions"],
+      ["Questions per change", num(s.asksPerChange), s.agentChanges ? `${s.asks} on ${s.agentChanges} agent-started changes` : "none recorded yet"],
     ];
     $("#kpis").replaceChildren(...tiles.map(([label, value, note]) => el("div", { class: "tile" },
       el("div", { class: "label", text: label }), el("div", { class: "value", text: value }), el("div", { class: "note", text: note }))));
-  }
-
-  function waitingItems() {
-    const items = [];
-    for (const r of D.changes) {
-      if (!inProject(r.project) || !matches(r.title, r.summary, r.issue, r.project, r.branch)) continue;
-      if (r.status === "pr_open") items.push({ kind: "PR", r, ts: r.opened_at });
-      else if (r.status === "awaiting_approval") items.push({ kind: "Plan", r, ts: r.created_at });
-    }
-    for (const a of D.asks) {
-      if (a.open && inProject(a.project) && matches(a.note, a.title, a.issue, a.project)) items.push({ kind: "Question", a, ts: a.ts });
-    }
-    return items.sort((x, y) => Date.parse(x.ts) - Date.parse(y.ts));
-  }
-
-  function renderWaiting(items) {
-    const box = $("#waiting");
-    if (!items.length) { box.replaceChildren(el("p", { class: "empty", text: "Nothing is waiting on you." })); return; }
-    const list = el("ul", { class: "list" });
-    for (const item of items) {
-      if (item.kind === "Question") {
-        const a = item.a;
-        list.append(el("li", null,
-          el("div", { class: "line1" }, el("span", { class: "chip", text: "Question" }), el("strong", { text: a.project }),
-            `#${a.change_id}${a.issue ? " " + a.issue : ""}`, a.note || ""),
-          el("div", { class: "line2" }, el("span", { text: `${a.reason} · asked ${fmtAge(a.ts)} ago` }), el("span", { text: a.title || "" }))));
-        continue;
-      }
-      const r = item.r;
-      const flags = [];
-      if (item.kind === "PR") {
-        flags.push(el("span", { text: `open ${fmtAge(r.opened_at)}` }));
-        if (r.ci && r.ci !== "none") flags.push(el("span", null, "CI ", ciCell(r.ci)));
-        if (r.mergeable === "CONFLICTING") flags.push(el("span", null, el("span", { class: "st st-critical", "aria-hidden": "true" }, "⚠"), "conflicts with base"));
-        if (hoursSince(r.opened_at) > D.stale_hours) flags.push(el("span", null, el("span", { class: "st st-warning", "aria-hidden": "true" }, "●"), "stale"));
-        if (r.merge_after) flags.push(el("span", { text: `merge after ${r.merge_after}` }));
-        if (r.owner_actions) flags.push(el("span", { text: `at merge: ${r.owner_actions}` }));
-      } else {
-        flags.push(el("span", { text: "plan waiting for approval" }));
-      }
-      const title = r.pr_url ? el("a", { href: r.pr_url, target: "_blank", rel: "noopener", text: r.title }) : el("span", { text: r.title });
-      list.append(el("li", null,
-        el("div", { class: "line1" }, el("span", { class: "chip", text: item.kind }), el("strong", { text: r.project }),
-          r.pr ? `#${r.pr}` : `change #${r.id}`, title),
-        el("div", { class: "line2" }, ...flags)));
-    }
-    box.replaceChildren(list);
   }
 
   function renderProjects(rowsByProject) {
@@ -460,7 +405,7 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
     const total = counts.reduce((s, [, n]) => s + n, 0);
     const chart = $("#asks-chart");
     if (!total) {
-      chart.replaceChildren(el("p", { class: "empty" }, "No questions logged yet. Agents log each stop with ", el("code", { text: "change-ledger log ask --reason …" }), "."));
+      chart.replaceChildren(el("p", { class: "empty" }, "No questions recorded yet. Agents list each stop under \"Questions and decisions\" in the PR text, and ", el("code", { text: "change-ledger finish" }), " records them."));
     } else {
       counts.sort((a, b) => b[1] - a[1]);
       const max = counts[0][1];
@@ -476,7 +421,7 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
     $("#asks-list").replaceChildren(latest.length ? el("ul", { class: "list" }, ...latest.map((a) => el("li", null,
       el("div", { class: "line1" }, el("span", { class: "chip", text: a.reason }), el("strong", { text: a.project }), a.note || ""),
       el("div", { class: "line2" }, el("span", { text: fmtWhen(a.ts) }),
-        el("span", { text: a.answered ? `answer: ${a.answer || "(no note)"}` : a.open ? "waiting for an answer" : "no answer logged" }))))) : "");
+        el("span", { text: `#${a.change_id}${a.issue ? " " + a.issue : ""} ${a.title || ""}` }))))) : "");
   }
 
   function renderEstimates(s) {
@@ -554,9 +499,7 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
     const rows = D.changes.filter(inScope);
     const issues = D.issues.filter((i) => inProject(i.project));
     const s = summarize(rows, issues);
-    const waiting = waitingItems();
-    renderKpis(s, waiting.length);
-    renderWaiting(waiting);
+    renderKpis(s);
     const projects = [...new Set(rows.map((r) => r.project))].sort()
       .map((p) => [p, summarize(rows.filter((r) => r.project === p), D.issues.filter((i) => i.project === p))]);
     renderProjects(projects);

@@ -173,6 +173,19 @@ class Parsing(unittest.TestCase):
         self.assertEqual((fields["code_lines"], fields["doc_lines"]), (120, 30))
         self.assertEqual(fields["commits_after_open"], 0)
 
+    def test_parse_notes(self):
+        events, lessons, unknown = cl.parse_notes([
+            "", "Prose around the bullets is ignored.", "- None.",
+            "- Decision: email or SMS? Answer: email", "- plan rejected: split it first", "- plan approved",
+            "- code-reviewer: changes needed, x", "- po-reviewer: APPROVED", "- code-reviewer: pass",
+            "- feedback: rename it", "- lesson for AGENTS.md: write it down", "- lesson: no target", "- odd line"])
+        self.assertEqual([(e["kind"], e.get("reason"), e.get("verdict"), e.get("round")) for e in events], [
+            ("ask", "decision", None, None), ("plan", None, None, 1), ("rejected", None, None, None),
+            ("plan", None, None, 2), ("approved", None, None, None), ("review", None, "CHANGES NEEDED", 1),
+            ("review", None, "APPROVED", 1), ("review", None, "PASS", 2), ("feedback", None, None, None)])
+        self.assertEqual(lessons, [("AGENTS.md", "write it down"), (None, "no target")])
+        self.assertEqual(unknown, ["odd line"])
+
     def test_rework_counts_author_dates_from_the_start_of_review(self):
         def after_open(pr):
             return cl.pr_fields(cl.normalize_pr(pr))["commits_after_open"]
@@ -240,52 +253,65 @@ class Flow(unittest.TestCase):
     def kinds(self, cid=1):
         return [r["kind"] for r in self.query("SELECT kind FROM events WHERE change_id = ? ORDER BY id", (cid,))]
 
-    def test_issue_cycle_from_plan_to_merge(self):
+    def test_issue_cycle_from_start_to_merge(self):
         out = self.run_cli("start", "--issue", "p1-03", "--title", "Account signup", "--kind", "feat",
                            "--risk", "med", "--size", "Md", "--model", "claude-opus-5-5")
         self.assertIn("#1 demo P1-03", out)
+        self.assertIn("Open PRs: none", out)  # the brief comes with it
+        notes = Path(re.search(r"PR text: (\S+)", out).group(1))
+        self.assertEqual(notes.read_text(encoding="utf-8"), "## Questions and decisions\n\n")
         self.assertIn("already open", self.run_cli("start", "--issue", "P1-03", "--title", "Account signup"))
         r = self.row()
-        self.assertEqual((r["profile"], r["thread"], r["effort"], r["risk"], r["size"]),
-                         ("reviewed", "thread-1", "medium", "Med/-", "Md/-"))
+        self.assertEqual((r["profile"], r["thread"], r["effort"], r["exp_risk"], r["exp_size"], r["seen_risk"]),
+                         ("reviewed", "thread-1", "medium", "Med", "Md", None))
+        self.assertEqual(r["issue_title"], "Account signup")  # start mirrors the roadmap
 
-        self.run_cli("log", "plan", "email + password, no social login")
-        self.assertEqual(self.row()["status"], "awaiting_approval")
-        self.assertIn("1 open question", self.run_cli("log", "ask", "--reason", "context", "where do auth errors live?"))
-        self.run_cli("log", "answer", "apps/api/errors.py; add it to AGENTS.md")
-        self.run_cli("log", "approved", "drop the CSV export")
-        self.assertEqual(self.row()["status"], "in_progress")
-
+        # the lines the agent adds as things happen, then the PR text it writes above them at delivery
         self.git("checkout", "-q", "-b", "feat/p1-03-signup")  # found by thread, then the branch is recorded
-        self.assertIn("round 1", self.run_cli("log", "review", "--actor", "code-reviewer", "--verdict", "block", "missing rate limit"))
-        self.assertIn("round 2", self.run_cli("log", "review", "--actor", "code-reviewer", "--verdict", "PASS"))
-        self.assertEqual(self.row()["branch"], "feat/p1-03-signup")
-        self.run_cli("set", "--summary", "Email signup with verification.", "--seen-risk", "Hi", "--seen-size", "Md",
-                     "--merge-after", "acme/other#2", "--owner-actions", "run make migrate")
-        self.assertIn("L1 open · demo #1", self.run_cli("lesson", "auth error path belongs in AGENTS.md", "--target", "AGENTS.md"))
-
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- plan approved: drop the CSV export\n"
+                    "- context: where do auth errors live? Answer: apps/api/errors.py; it belongs in AGENTS.md\n"
+                    "- code-reviewer: BLOCK, missing rate limit\n- code-reviewer: PASS\n"
+                    "- lesson for AGENTS.md: the auth error path belongs in AGENTS.md\n- a line in no known form\n")
+        notes.write_text("## Summary\n\nEmail signup with verification.\n\nMore detail.\n\n"
+                         + notes.read_text(encoding="utf-8"), encoding="utf-8")
         self.fake.prs = [node(5, "feat(P1-03): account signup", "feat/p1-03-signup", created=-2,
                               commits=(-2.2,), checks=[check("tests", "FAILURE")], mergeable="CONFLICTING")]
-        self.run_cli("sync")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            out = self.run_cli("finish", "--seen-risk", "Hi", "--seen-size", "Md",
+                               "--merge-after", "acme/other#2", "--owner-actions", "run make migrate")
+        self.assertIn("a line in no known form", err.getvalue())
+        self.assertNotIn("plan approved", err.getvalue())  # the plan gate has its line
+        for expected in ("1 question (context 1), 1 plan round, 2 reviews (1 blocking), 0 feedback rounds",
+                         "PR #5 P1-03", "CI fail", "CONFLICTS", "merge after acme/other#2", "at merge: run make migrate"):
+            self.assertIn(expected, out)
         r = self.row()
-        self.assertEqual((r["pr"], r["status"], r["ci"], r["conflicted"], r["code_lines"]), (5, "pr_open", "fail", 1, 120))
+        self.assertEqual((r["summary"], r["branch"], r["pr"], r["status"], r["ci"], r["conflicted"], r["code_lines"]),
+                         ("Email signup with verification.", "feat/p1-03-signup", 5, "pr_open", "fail", 1, 120))
         self.assertEqual(r["issue_title"], "Account signup")
-        brief = self.run_cli("brief", "--no-sync")
-        for expected in ("profile reviewed", "PR #5 P1-03", "CI fail", "CONFLICTS", "merge after acme/other#2",
-                         "at merge: run make migrate", "L1 [AGENTS.md]"):
-            self.assertIn(expected, brief)
+        self.assertIn("L1 [AGENTS.md]", self.run_cli("brief", "--no-sync"))
+
+        # a feedback round: one more line, and a second finish replaces what the first recorded
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- feedback: rename the endpoint\n")
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.run_cli("finish", "--no-sync")
+        r = self.row()
+        self.assertEqual((r["asks"], r["plan_rounds"], r["review_rounds"], r["feedback_rounds"]), (1, 1, 2, 1))
+        self.assertEqual(len(self.query("SELECT id FROM lessons")), 1)
 
         self.fake.prs = [node(5, "feat(P1-03): account signup", "feat/p1-03-signup", state="MERGED", created=-2,
                               merged=-0.5, commits=(-2.2, -1.0, -0.8), checks=[check("tests", "SUCCESS")])]
         self.run_cli("sync")
         r = self.row()
         self.assertEqual((r["status"], r["outcome"], r["commits_after_open"]), ("merged", "rework", 2))
-        self.assertEqual((r["asks"], r["asks_context"], r["plan_rounds"], r["review_rounds"], r["review_blocks"]),
-                         (1, 1, 1, 2, 1))
+        self.assertEqual((r["asks"], r["asks_context"], r["plan_rounds"], r["plan_rejections"], r["review_rounds"],
+                          r["review_blocks"]), (1, 1, 1, 0, 2, 1))
         self.assertEqual((r["risk"], r["size"], r["rating_from"]), ("Med/Hi", "Md/Md", "ledger"))
         self.assertAlmostEqual(r["hours_to_merge"], 1.5, delta=0.05)
-        self.assertEqual(self.kinds(), ["start", "plan", "ask", "answer", "approved", "review", "review", "rated",
-                                        "pr_opened", "ci", "conflict", "merged", "ci"])
+        self.assertEqual(self.kinds(), ["start", "rated", "pr_opened", "ci", "conflict", "plan", "approved", "ask",
+                                        "review", "review", "feedback", "merged", "ci"])
 
         stats = self.run_cli("stats")
         self.assertIn("| demo | reviewed | 1 | 1 | 100% | 0% |", stats)
@@ -348,7 +374,7 @@ class Flow(unittest.TestCase):
         r = self.row()
         self.assertEqual((r["status"], r["opened_at"], r["commits_after_open"]), ("in_progress", None, 0))
         brief = self.run_cli("brief", "--no-sync")
-        self.assertIn("Waiting on Filipe: nothing", brief)
+        self.assertIn("Open PRs: none", brief)
         self.assertIn("#1 feat: draft · draft PR #6 · edits src/app.py, README.md", brief)
         ready = node(6, "feat: draft", "feat/draft", created=-5, commits=(-5.1, -3.0, -0.5),
                      first_event=("ReadyForReviewEvent", -2), last_ready=-2)
@@ -394,6 +420,26 @@ class Flow(unittest.TestCase):
             cl.main(["set", "--id", second, "--pr", "9"])  # #1, an agent's change, holds PR 9 now
         self.assertEqual(caught.exception.code, 2)
         self.assertIn("PR #9 already belongs to change #1", err.getvalue())
+
+    def test_finish_warns_when_a_gated_plan_has_no_line(self):
+        out = self.run_cli("start", "--title", "Big change", "--risk", "Med", "--size", "Md")
+        notes = Path(re.search(r"PR text: (\S+)", out).group(1))
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- code-reviewer: PASS\n")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            out = self.run_cli("finish", "--no-sync")
+        self.assertIn("1 review (0 blocking)", out)
+        self.assertIn("no PR on GitHub", out)
+        self.assertIn("rated Med/Md, so the plan went to Filipe", err.getvalue())
+
+    def test_brief_flags_idle_work(self):
+        self.run_cli("start", "--title", "Forgotten work")
+        with closing(cl.connect()) as con:
+            cl._CONNECTIONS.remove(con)
+            con.execute("UPDATE changes SET updated_at = ?", (ts(-100),))
+            con.commit()
+        self.assertIn("#1 Forgotten work · idle 4d", self.run_cli("brief", "--no-sync"))
 
     def test_logging_needs_an_open_change(self):
         with (self.assertRaises(SystemExit) as caught, redirect_stdout(io.StringIO()),

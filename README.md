@@ -42,12 +42,14 @@ Keep the clone at `~/.agents`, on `main` or on a branch that has these files; th
 
 ## Change ledger
 
-`change-ledger` keeps one row per change, per project, in a local SQLite database. It shows which PRs merge without rework, and why work stops for Filipe. Agents write the judgment fields while `issue-cycle` runs. `change-ledger sync` reads everything else from GitHub and from each project's roadmap and `AGENTS.md` on the default branch. The rules for agents are the "Change ledger" section of `claude/workflow.md`.
+`change-ledger` keeps one row per change, per project, in a local SQLite database. It shows which PRs merge without rework, and why work stops for Filipe. Agents write twice per issue: `start` when the work begins and `finish` when the PR opens. In between, they list each question, plan answer, review round and feedback round under "Questions and decisions" in the PR text, which `finish` reads. `change-ledger sync` reads everything else from GitHub and from each project's roadmap and `AGENTS.md` on the default branch. The rules for agents are the "Change ledger" section of `claude/workflow.md`.
 
 | Command | What it does |
 | --- | --- |
-| `brief` | Start-of-work view for the repo in the working directory: what waits on Filipe (open PRs with CI, conflicts, merge order and edited files; plans; unanswered questions), open lessons, last 30 days. Syncs that project first |
-| `start`, `set`, `log`, `lesson` | Agent writes: a new change, its fields, an event (`plan`, `approved`, `rejected`, `ask`, `answer`, `checks`, `review`, `feedback`, `note`), a lesson |
+| `start` | Records a change when the work begins, creates its PR text file in the checkout's git folder, and prints the brief |
+| `finish` | When the PR opens, and after each feedback round: records what the PR text lists under "Questions and decisions", the summary (the first paragraph of its Summary) and the seen rating, then prints the PR's CI and conflicts. A second run replaces what the first recorded |
+| `brief` | What `start` prints for the repo in the working directory: open PRs with CI, conflicts, merge order and edited files; work in progress, with changes idle for 3 days flagged; open lessons; last 30 days. Syncs that project first |
+| `set`, `log`, `lesson` | Corrections: one field, or one event. `lesson` also lists lessons and marks one applied or dropped |
 | `sync` | Reads PRs (state, lines, CI, conflicts, commits after opening, merge time) and roadmap ratings. Finds every clone under `~` owned by the `gh` user, PRs nobody logged included |
 | `list`, `show <id>` | Recent changes as a table; one change with its event history |
 | `stats` | Merge rate, clean merges, time to merge, rework, questions by reason, estimate accuracy, data gaps |
@@ -59,30 +61,31 @@ What a change records:
 | Field | Filled by | Why |
 | --- | --- | --- |
 | Project, issue, title, kind | `start`; sync for PRs it finds | Group by project and by roadmap issue; compare kinds (feat, fix, docs…) |
-| Summary | Agent, after opening the PR | What changed and why, in one or two sentences |
-| Expected/Seen Risk, Expected/Seen Size | Agent; otherwise the issue's rating from the roadmap | Same tags and `expected/seen` cells as the roadmaps |
-| Rating note | Agent | Why a rating was set or raised |
-| Status and outcome | `log` and sync | planning → awaiting_approval → in_progress → pr_open → merged or closed. A draft PR stays in_progress until it is marked ready. Outcome: clean merge, merged after rework, open, dropped |
+| Summary | `finish`, from the first paragraph of the PR text's Summary | What changed and why, in one or two sentences |
+| Expected/Seen Risk, Expected/Seen Size | `start` and `finish`; otherwise the issue's rating from the roadmap | Same tags and `expected/seen` cells as the roadmaps |
+| Rating note | `start` and `finish` | Why a rating was set or raised |
+| Status and outcome | `start` and sync | planning → in_progress → pr_open → merged or closed. A draft PR stays in_progress until it is marked ready. Outcome: clean merge, merged after rework, open, dropped |
 | Code lines, doc lines, measured size | Sync | Lines added outside docs, lockfiles, generated files and binaries, on the Sm/Md/Lg scale, to check the seen size |
-| Commits after opening, feedback rounds | Sync; agent `log feedback` | Rework once the PR was up for review. A commit counts by its author date, so a rebase alone adds none |
+| Commits after opening, feedback rounds | Sync; `feedback` lines in the PR text | Rework once the PR was up for review. A commit counts by its author date, so a rebase alone adds none |
 | CI, mergeable, conflicted | Sync | Red checks and conflicts on open PRs. Conflicted stays set once a sync saw a conflict |
 | Edited paths | Sync | `brief` shows them for open and draft PRs, so an overlap shows before planning |
-| Questions by reason | Agent `log ask` | Why work stopped for Filipe: decision, context, access, correction, blocked |
-| Plan rounds and rejections, review rounds and blocks | Agent `log` | Where rework came from before the PR |
-| Merge after, owner actions | Agent | Merge order and the step Filipe takes at merge, shown in `brief` and the report |
+| Questions by reason | `finish`, from the PR text | Why work stopped for Filipe: decision, context, access, correction, blocked |
+| Plan rounds and rejections, review rounds and blocks | `finish`, from the PR text | Where rework came from before the PR |
+| Merge after, owner actions | `finish` | Merge order and the step Filipe takes at merge, shown in `brief` |
 | Model, effort, T3 thread, profile | `start`, from the session | The model policy in practice (Fable on at most 10% of issues), effort against outcome, the thread to reopen |
 | Opened, merged, time to merge | Sync | How long PRs wait. Opened is when the PR was up for review: for a draft, when it was marked ready |
-| Lessons | Agent `lesson` | What would have prevented a question or a rework round, where the fix belongs, and the PR that applied it |
+| Lessons | `lesson for …` lines in the PR text, through `finish` | What would have prevented a question or a rework round, where the fix belongs, and the PR that applied it |
 
 Definitions:
 - **Clean merge:** merged with no commit written after the PR was up for review and no feedback round.
 - **Merge rate:** merged PRs out of merged plus closed-without-merging PRs.
 - **Questions per change:** counted only on changes agents started with `start`, because PRs found by sync carry no events.
-- **Dependabot:** its PRs show in "waiting on Filipe" but stay out of the rates.
+- **Dependabot:** its PRs stay out of the rates.
 - **Conflicts:** GitHub reports a conflict only while the PR is open, so conflicts from before the ledger existed are not in it.
 
 The data lives in `~/.local/share/change-ledger/ledger.db` (set `CHANGE_LEDGER_DB` to move it), outside every repo, and stays on this machine.
 - **GitHub:** read only. The tool runs GraphQL queries for PRs and `gh api` GETs for `ROADMAP.md` and `AGENTS.md`. It never posts, comments or uploads.
+- **PR text:** each change's file sits in the checkout's git folder (`.git/…/change-ledger-<id>.md`), so it is never committed. Its "Questions and decisions" section is published with the PR, so it never holds secrets or personal data.
 - **Report:** makes no network requests. From Windows, open `\\wsl.localhost\Ubuntu\home\<user>\.local\share\change-ledger\report.html`.
 - **Repos:** set `CHANGE_LEDGER_ROOTS` and `CHANGE_LEDGER_OWNERS` to change which clones it scans.
 - **Tests:** `python3 -m unittest discover -s tools/change-ledger`.

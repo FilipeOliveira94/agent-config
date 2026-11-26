@@ -4,9 +4,12 @@
 One row per change (a PR, or work meant to become one): what it is, a short
 summary, its Expected/Seen Risk and Size, and what it cost on the way to the
 merge: questions to Filipe, plan and review rounds, rework after the PR opened,
-CI failures and conflicts. Agents write the judgment fields while they work
-(`start`, `log`, `set`, `lesson`); `sync` reads what GitHub and each roadmap
-already know, so nobody types PR numbers, line counts, CI states or merge times.
+CI failures and conflicts. Agents write twice per issue: `start` when the work
+begins, and `finish` when the PR opens. `finish` reads the questions, plan
+answers, review verdicts and feedback that the agent listed under "Questions and
+decisions" in the PR text as they happened. `sync` reads what GitHub and each
+roadmap already know, so nobody types PR numbers, line counts, CI states or
+merge times.
 
 The data is one SQLite file outside every repository:
 ~/.local/share/change-ledger/ledger.db, or $CHANGE_LEDGER_DB. Towards GitHub the
@@ -63,6 +66,17 @@ LOG_KINDS = {
     "note": "anything else worth keeping",
 }
 STATUS_AFTER = {"plan": "awaiting_approval", "approved": "in_progress", "rejected": "planning"}
+IDLE_HOURS = 72  # a change in progress with no PR and no update for this long is flagged in `brief`
+
+# The PR text's "Questions and decisions" section: one bullet per event, written when it happens.
+NOTES_HEADING = "Questions and decisions"
+NOTE_ASK = re.compile(r"^(decision|context|access|correction|blocked)\s*:\s*(.+)$", re.I)
+NOTE_PLAN = re.compile(r"^plan\s+(approved|rejected)\b[\s:,.-]*(.*)$", re.I)
+NOTE_FEEDBACK = re.compile(r"^feedback\s*:\s*(.+)$", re.I)
+NOTE_LESSON = re.compile(r"^lesson(?:\s+for\s+([^:]+?))?\s*:\s*(.+)$", re.I)
+NOTE_REVIEW = re.compile(r"^([a-z][\w.-]*)\s*:\s*(PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT)\b"
+                         r"[\s,.:;-]*(.*)$", re.I)
+NOTE_KINDS = ("ask", "answer", "plan", "approved", "rejected", "review", "feedback")  # what finish rewrites
 
 
 # ---------------------------------------------------------------- basics
@@ -1205,6 +1219,82 @@ def fmt_num(value: float | None, digits: int = 1) -> str:
     return "-" if value is None else f"{value:.{digits}f}"
 
 
+# ---------------------------------------------------------------- the PR text
+
+def notes_file(cwd, cid: int) -> Path | None:
+    """A change's PR text file, in the checkout's git folder: never committed, kept when a conversation is compacted."""
+    gitdir = git(cwd, "rev-parse", "--absolute-git-dir")
+    return Path(gitdir) / f"change-ledger-{cid}.md" if gitdir else None
+
+
+def md_section(text: str, heading: str) -> list[str] | None:
+    """The lines under a Markdown heading, up to the next heading of the same or a higher level."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^(#{1,6})\s+(.*?)\s*#*\s*$", line)
+        if not (m and m.group(2).strip().lower() == heading.lower()):
+            continue
+        body = []
+        for nxt in lines[i + 1:]:
+            h = re.match(r"^(#{1,6})\s", nxt)
+            if h and len(h.group(1)) <= len(m.group(1)):
+                break
+            body.append(nxt)
+        return body
+    return None
+
+
+def first_paragraph(lines: list[str], limit: int = 300) -> str | None:
+    """The first paragraph of a section, as one line: the ledger's summary when finish gets none."""
+    para = []
+    for line in lines:
+        if line.strip():
+            para.append(re.sub(r"^\s*[-*+]\s+", "", line).strip())
+        elif para:
+            break
+    text = " ".join(para)
+    return short(text, limit) if text else None
+
+
+def parse_notes(lines: list[str]) -> tuple[list[dict], list[tuple[str | None, str]], list[str]]:
+    """Events and lessons from the bullets under "Questions and decisions", and the bullets not understood.
+
+    - decision|context|access|correction|blocked: <question> Answer: <answer>
+    - plan approved|rejected: <adjustments or why>
+    - <reviewer>: PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT, <findings that held>
+    - feedback: <what Filipe asked for after the PR opened>
+    - lesson for <target>: <what would have prevented it>
+    """
+    events: list[dict] = []
+    lessons: list[tuple[str | None, str]] = []
+    unknown: list[str] = []
+    rounds: dict[str, int] = {}
+    plans = 0
+    for raw in lines:
+        m = re.match(r"^\s*[-*+]\s+(.*\S)\s*$", raw)
+        if not m or re.fullmatch(r"(none|nothing|n/a)\.?", m.group(1), re.I):
+            continue
+        item = m.group(1)
+        if a := NOTE_ASK.match(item):
+            events.append({"kind": "ask", "reason": a.group(1).lower(), "actor": "dev", "note": a.group(2).strip()})
+        elif p := NOTE_PLAN.match(item):
+            plans += 1
+            events.append({"kind": "plan", "actor": "dev", "round": plans})
+            events.append({"kind": p.group(1).lower(), "actor": "filipe", "note": p.group(2).strip() or None})
+        elif f := NOTE_FEEDBACK.match(item):
+            events.append({"kind": "feedback", "actor": "filipe", "note": f.group(1).strip()})
+        elif lesson := NOTE_LESSON.match(item):
+            lessons.append(((lesson.group(1) or "").strip() or None, lesson.group(2).strip()))
+        elif r := NOTE_REVIEW.match(item):
+            actor = r.group(1).lower()
+            rounds[actor] = rounds.get(actor, 0) + 1
+            events.append({"kind": "review", "actor": actor, "verdict": r.group(2).upper(),
+                           "round": rounds[actor], "note": r.group(3).strip() or None})
+        else:
+            unknown.append(item)
+    return events, lessons, unknown
+
+
 # ---------------------------------------------------------------- resolving the current change
 
 def find_current(con, project, info):
@@ -1263,12 +1353,15 @@ def validated(value: str | None, allowed: tuple, flag: str) -> str | None:
 def cmd_start(args) -> None:
     con = connect()
     project, info = here(con, args.project)
+    if not args.no_sync:  # fresh PRs for the brief (one already open for this work is taken over), and the
+        sync(con, [project["name"]], limit=30, report=lambda s: None)  # roadmap's rating for the issue
     issue = (norm_issue(args.issue) or args.issue.strip()) if args.issue else None
     branch = current_branch(info[2]) if info else None
     thread = args.thread or os.environ.get("T3CODE_THREAD_ID")
     model = args.model or os.environ.get("ANTHROPIC_MODEL")
     effort = args.effort or os.environ.get("CLAUDE_EFFORT")
     risk, size = validated(args.risk, RISKS, "--risk"), validated(args.size, SIZES, "--size")
+    cid = headline = None
     if not args.new:
         rows = con.execute("SELECT * FROM changes WHERE project = ? AND status NOT IN "
                            "('merged', 'closed', 'abandoned') ORDER BY id DESC", (project["name"],)).fetchall()
@@ -1279,8 +1372,8 @@ def cmd_start(args) -> None:
             if not (same_work and same_place):
                 continue
             if row["source"] != "github":
-                print(f"already open (pass --new for a second change): {change_line(row)}")
-                return
+                cid, headline = row["id"], f"already open (pass --new for a second change): {change_line(row)}"
+                break
             # sync found this PR before anyone started it: the agent takes it over
             adopt = {"source": "agent", "thread": thread or row["thread"], "model": model or row["model"],
                      "effort": effort or row["effort"], "exp_risk": row["exp_risk"] or risk,
@@ -1289,38 +1382,43 @@ def cmd_start(args) -> None:
             update_change(con, row["id"], **adopt)
             add_event(con, row["id"], "start", actor="dev", note="took over a change that sync found first")
             con.commit()
-            print(f"adopted: {change_line(get_change(con, row['id']))}")
-            return
-    ts = iso(now_utc())
-    cur = con.execute(
-        "INSERT INTO changes(project, issue, title, kind, status, exp_risk, exp_size, rating_note, profile, "
-        "model, effort, thread, branch, source, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, ?)",
-        (project["name"], issue, args.title, args.kind.lower() if args.kind else None, risk, size,
-         args.rating_note, project["profile"], model, effort, thread, branch, ts, ts))
-    add_event(con, cur.lastrowid, "start", ts, actor="dev",
-              note=f"expected risk {risk or '-'}, size {size or '-'}" + (f"; {args.rating_note}" if args.rating_note else ""))
-    con.commit()
-    print(change_line(get_change(con, cur.lastrowid)))
+            cid, headline = row["id"], f"adopted: {change_line(get_change(con, row['id']))}"
+            break
+    if cid is None:
+        ts = iso(now_utc())
+        cur = con.execute(
+            "INSERT INTO changes(project, issue, title, kind, status, exp_risk, exp_size, rating_note, profile, "
+            "model, effort, thread, branch, source, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, ?)",
+            (project["name"], issue, args.title, args.kind.lower() if args.kind else None, risk, size,
+             args.rating_note, project["profile"], model, effort, thread, branch, ts, ts))
+        add_event(con, cur.lastrowid, "start", ts, actor="dev",
+                  note=f"expected risk {risk or '-'}, size {size or '-'}" + (f"; {args.rating_note}" if args.rating_note else ""))
+        con.commit()
+        cid, headline = cur.lastrowid, change_line(get_change(con, cur.lastrowid))
+    print(headline)
+    notes = notes_file(info[2], cid) if info else None
+    if notes:
+        if not notes.exists():
+            notes.write_text(f"## {NOTES_HEADING}\n\n", encoding="utf-8")
+        print(f"PR text: {notes} (one line under \"{NOTES_HEADING}\" for each question, plan answer, "
+              "review verdict and feedback round, written when it happens)")
+    print(brief_text(con, project["name"]))
 
 
-def cmd_set(args) -> None:
-    con = connect()
-    row = resolve_change(con, args)
+def field_updates(con, row, args) -> tuple[dict, list[str], str | None]:
+    """The column updates the field flags of `set` and `finish` ask for, the rating changes, and a takeover note."""
     updates = {}
-    for flag, column in (("issue", "issue"), ("title", "title"), ("summary", "summary"),
-                         ("rating_note", "rating_note"), ("merge_after", "merge_after"),
-                         ("owner_actions", "owner_actions"), ("branch", "branch"), ("model", "model"),
-                         ("effort", "effort")):
-        value = getattr(args, flag)
+    for flag in ("issue", "title", "summary", "rating_note", "merge_after", "owner_actions", "branch", "model", "effort"):
+        value = getattr(args, flag, None)
         if value is not None:
-            updates[column] = value.strip() or None
-    if args.issue:
+            updates[flag] = value.strip() or None
+    if getattr(args, "issue", None):
         updates["issue"] = norm_issue(args.issue) or args.issue.strip()
-    if args.kind:
+    if getattr(args, "kind", None):
         updates["kind"] = args.kind.lower()
     took_over = None
-    if args.pr is not None:
+    if getattr(args, "pr", None) is not None:
         other = con.execute("SELECT * FROM changes WHERE project = ? AND pr = ? AND id <> ?",
                             (row["project"], args.pr, row["id"])).fetchone()
         if other is not None and other["source"] != "github":
@@ -1333,30 +1431,94 @@ def cmd_set(args) -> None:
                 updates.setdefault(key, other[key])  # a field given in this same call wins
             took_over = f"took over PR #{args.pr} from change #{other['id']}, which sync had recorded"
         updates["pr"] = args.pr
-    if args.status:
+    if getattr(args, "status", None):
         updates["status"] = validated(args.status, STATUSES, "--status")
     rating_changes = []
     for flag, column, allowed in (("risk", "exp_risk", RISKS), ("size", "exp_size", SIZES),
                                   ("seen_risk", "seen_risk", RISKS), ("seen_size", "seen_size", SIZES)):
-        value = getattr(args, flag)
+        value = getattr(args, flag, None)
         if value is None:
             continue
         value = validated(value, allowed, "--" + flag.replace("_", "-"))
         if row[column] != value:
             rating_changes.append(f"{column.replace('_', ' ')} {row[column] or '-'}→{value}")
         updates[column] = value
-    if not updates:
-        die("nothing to set: pass at least one field (see `change-ledger set --help`)", 2)
-    update_change(con, row["id"], **updates)
+    return updates, rating_changes, took_over
+
+
+def apply_updates(con, row, updates: dict, rating_changes: list[str], took_over: str | None, rating_note) -> None:
+    if updates:
+        update_change(con, row["id"], **updates)
     if took_over:
         add_event(con, row["id"], "note", actor="dev", note=took_over)
     if rating_changes:
         add_event(con, row["id"], "rated", actor="dev",
-                  note="; ".join(rating_changes) + (f" ({args.rating_note})" if args.rating_note else ""))
+                  note="; ".join(rating_changes) + (f" ({rating_note})" if rating_note else ""))
     if updates.get("status") == "abandoned":
         add_event(con, row["id"], "note", actor="dev", note="abandoned")
+
+
+def cmd_set(args) -> None:
+    con = connect()
+    row = resolve_change(con, args)
+    updates, rating_changes, took_over = field_updates(con, row, args)
+    if not updates:
+        die("nothing to set: pass at least one field (see `change-ledger set --help`)", 2)
+    apply_updates(con, row, updates, rating_changes, took_over, args.rating_note)
     con.commit()
     print(change_line(get_change(con, row["id"])))
+
+
+def cmd_finish(args) -> None:
+    """Record what the work went through, from the PR text, then show the PR's CI and conflicts."""
+    con = connect()
+    row = resolve_change(con, args)
+    path = Path(args.body).expanduser() if args.body else notes_file(Path.cwd(), row["id"])
+    if args.body and not path.is_file():
+        die(f"{path}: no such file", 2)
+    text = path.read_text(encoding="utf-8", errors="replace") if path and path.is_file() else None
+    notes = md_section(text, NOTES_HEADING) if text is not None else None
+    updates, rating_changes, took_over = field_updates(con, row, args)
+    if "summary" not in updates and not row["summary"] and text is not None:
+        summary = first_paragraph(md_section(text, "Summary") or [])
+        if summary:
+            updates["summary"] = summary
+    apply_updates(con, row, updates, rating_changes, took_over, args.rating_note)
+    if notes is not None:
+        events, lessons, unknown = parse_notes(notes)
+        # the section is the whole record: a second finish replaces these events instead of adding to them
+        marks = ", ".join("?" * len(NOTE_KINDS))
+        con.execute(f"DELETE FROM events WHERE change_id = ? AND kind IN ({marks})", (row["id"], *NOTE_KINDS))
+        ts = iso(now_utc())
+        for event in events:
+            add_event(con, row["id"], event.pop("kind"), ts=ts, **event)
+        for target, lesson in lessons:
+            if not con.execute("SELECT 1 FROM lessons WHERE change_id = ? AND text = ?", (row["id"], lesson)).fetchone():
+                con.execute("INSERT INTO lessons(project, change_id, ts, text, target, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                            (row["project"], row["id"], ts, lesson, target, ts))
+        for item in unknown:
+            warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle): {short(item, 80)}")
+    elif path:
+        warn(f"{path} has no \"{NOTES_HEADING}\" section: no questions, plan rounds or reviews recorded")
+    else:
+        warn("no PR text file (not inside a git checkout): pass --body <file>")
+    con.commit()
+    if not args.no_sync:
+        sync(con, [row["project"]], limit=30, roadmaps=False, report=lambda s: None)
+    r = dict(con.execute("SELECT * FROM v_changes WHERE id = ?", (row["id"],)).fetchone())
+    if notes is not None and not r["plan_rounds"] and r["risk_expected"] and r["size_expected"] \
+            and (r["risk_expected"], r["size_expected"]) != ("Lo", "Sm"):
+        warn(f"rated {r['risk_expected']}/{r['size_expected']}, so the plan went to Filipe: add its "
+             f"\"- plan approved: …\" line under \"{NOTES_HEADING}\" and run finish again")
+    reasons = ", ".join(f"{k} {r['asks_' + k]}" for k in ASK_REASONS if r["asks_" + k])
+    print(change_line(get_change(con, row["id"])))
+    print(f"recorded: {plural(r['asks'], 'question')}" + (f" ({reasons})" if reasons else "")
+          + f", {plural(r['plan_rounds'], 'plan round')}, {plural(r['review_rounds'], 'review')}"
+          f" ({r['review_blocks']} blocking), {plural(r['feedback_rounds'], 'feedback round')}")
+    if r["pr"]:
+        print("  " + pr_line(r))
+    else:
+        print(f"  no PR on GitHub for branch {r['branch'] or '(none)'} yet: open it, then run finish again")
 
 
 def cmd_log(args) -> None:
@@ -1464,29 +1626,19 @@ def pr_line(row: dict) -> str:
     return " · ".join(bits)
 
 
-def cmd_brief(args) -> None:
-    con = connect()
-    project, _ = here(con, args.project)
-    name = project["name"]
-    if not args.no_sync:
-        sync(con, [name], limit=30, roadmaps=False, report=lambda s: None)
-        project = con.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
+def brief_text(con, name: str) -> str:
+    """Start-of-work context: open PRs and the files they edit, work in progress, open lessons, recent rates."""
+    project = con.execute("SELECT * FROM projects WHERE name = ?", (name,)).fetchone()
     rows = load_rows(con, project=name)
     out = [f"{name} · profile {project['profile'] or 'unset (AGENTS.md has no Agent workflow block)'}"
            f" · synced {fmt_age(project['synced_at']) + ' ago' if project['synced_at'] else 'never'}"]
     open_prs = [r for r in rows if r["status"] == "pr_open"]
-    plans = [r for r in rows if r["status"] == "awaiting_approval"]
-    asks = open_asks(con, name)
-    if open_prs or plans or asks:
-        out.append("Waiting on Filipe:")
+    if open_prs:
+        out.append("Open PRs:")
         out += ["  " + pr_line(r) for r in open_prs]
-        for r in plans:
-            out.append(f"  #{r['id']}{' ' + r['issue'] if r['issue'] else ''} plan waiting for approval: {short(r['title'], 60)}")
-        for a in asks:
-            out.append(f"  #{a['change_id']} question ({a['reason']}, {fmt_age(a['ts'])} ago): {short(a['note'], 100)}")
     else:
-        out.append("Waiting on Filipe: nothing")
-    active = [r for r in rows if r["status"] in ("planning", "in_progress")]
+        out.append("Open PRs: none")
+    active = [r for r in rows if r["status"] in ("planning", "awaiting_approval", "in_progress")]
     if active:
         out.append("In progress:")
         for r in active[:6]:
@@ -1495,8 +1647,10 @@ def cmd_brief(args) -> None:
                 line += f" · draft PR #{r['pr']}" if r["pr_url"] else f" · PR #{r['pr']}, not synced yet"
                 paths = hot_paths(r["paths"])
                 line += f" · edits {', '.join(paths)}" if paths else ""
-            elif r["branch"]:
-                line += f" ({r['branch']})"
+            else:
+                line += f" ({r['branch']})" if r["branch"] else ""
+                if hours_since(r["updated_at"]) > IDLE_HOURS:  # a thread that stopped before its PR
+                    line += f" · idle {fmt_age(r['updated_at'])}"
             out.append(line)
     lessons = con.execute("SELECT * FROM lessons WHERE project = ? AND state = 'open' ORDER BY id DESC",
                           (name,)).fetchall()
@@ -1508,9 +1662,16 @@ def cmd_brief(args) -> None:
             out.append(f"  … {len(lessons) - 4} more: change-ledger lesson --list --project {name}")
     recent = summarize(load_rows(con, project=name, since=iso(now_utc() - timedelta(days=30))), [])
     out.append(f"Last 30 days: {recent['merged']} merged, {recent['clean']} clean"
-               f" · {fmt_num(recent['asks_per_change'])} questions per change"
-               f" · {recent['open_prs']} PR{'s' if recent['open_prs'] != 1 else ''} open")
-    print("\n".join(out))
+               f" · {fmt_num(recent['asks_per_change'])} questions per change")
+    return "\n".join(out)
+
+
+def cmd_brief(args) -> None:
+    con = connect()
+    project, _ = here(con, args.project)
+    if not args.no_sync:
+        sync(con, [project["name"]], limit=30, roadmaps=False, report=lambda s: None)
+    print(brief_text(con, project["name"]))
 
 
 LIST_HEADERS = ["Change", "Project", "Issue", "Title", "Outcome", "Expected/Seen Risk", "Expected/Seen Size",
@@ -1623,7 +1784,7 @@ def cmd_stats(args) -> None:
                    [[k, n, c, pct(c, n)] for k, (n, c) in total["clean_by_size"].items()]))
     gaps = []
     if total["no_summary"]:
-        gaps.append(f"{total['no_summary']} agent changes with a PR but no summary (`change-ledger set --summary`)")
+        gaps.append(f"{total['no_summary']} agent changes with a PR but no summary (`change-ledger finish` was not run)")
     if total["no_seen"]:
         gaps.append(f"{total['no_seen']} merged agent changes without the seen half of both ratings")
     if gaps:
@@ -1684,15 +1845,10 @@ REPORT_COLUMNS = ["id", "project", "issue", "issue_title", "title", "kind", "sum
 
 
 def report_data(con) -> dict:
-    asks = []
-    for e in con.execute("SELECT e.*, c.project, c.issue, c.title, c.status FROM events e "
-                         "JOIN changes c ON c.id = e.change_id WHERE e.kind = 'ask' ORDER BY e.ts DESC"):
-        answer = con.execute("SELECT note FROM events WHERE change_id = ? AND kind = 'answer' AND id > ? "
-                             "ORDER BY id LIMIT 1", (e["change_id"], e["id"])).fetchone()
-        asks.append({"change_id": e["change_id"], "project": e["project"], "issue": e["issue"],
-                     "title": e["title"], "ts": e["ts"], "reason": e["reason"], "note": e["note"],
-                     "answered": answer is not None, "answer": answer[0] if answer else None,
-                     "open": answer is None and e["status"] not in FINISHED})
+    asks = [{"change_id": e["change_id"], "project": e["project"], "issue": e["issue"], "title": e["title"],
+             "ts": e["ts"], "reason": e["reason"], "note": e["note"]}
+            for e in con.execute("SELECT e.*, c.project, c.issue, c.title FROM events e "
+                                 "JOIN changes c ON c.id = e.change_id WHERE e.kind = 'ask' ORDER BY e.ts DESC, e.id")]
     return {
         "generated": iso(now_utc()),
         "db": str(db_path()),
@@ -1745,7 +1901,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=func)
         return p
 
-    p = add("start", cmd_start, "record a new change in the current repo (prints its id)")
+    p = add("start", cmd_start, "record a new change in the current repo; prints its PR text file and the brief")
     p.add_argument("--title", required=True, help="what the change does, or the issue title")
     p.add_argument("--issue", help="roadmap issue ID, e.g. P1-03")
     p.add_argument("--kind", help="feat, fix, docs, chore, refactor, test, ci, content...")
@@ -1757,8 +1913,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--thread", help="T3 thread id (default: $T3CODE_THREAD_ID)")
     p.add_argument("--project", help="project name, when not running inside its checkout")
     p.add_argument("--new", action="store_true", help="start a second change even if one is open for this work")
+    p.add_argument("--no-sync", action="store_true", help="do not refresh this project's PRs first")
 
-    p = add("set", cmd_set, "update fields of the current change")
+    p = add("finish", cmd_finish, "when the PR opens (and after each feedback round): record the PR text's "
+            "questions, plan answers, reviews and feedback, the summary and the seen rating; show CI and conflicts")
+    p.add_argument("--body", help="the PR text file (default: the one `start` created for this change)")
+    p.add_argument("--summary", help="one or two sentences (default: the first paragraph of the PR text's Summary)")
+    p.add_argument("--risk", help="expected risk, when the roadmap has none or the plan raised it")
+    p.add_argument("--size", help="expected size, when the roadmap has none or the plan raised it")
+    p.add_argument("--seen-risk", help="seen risk")
+    p.add_argument("--seen-size", help="seen size")
+    p.add_argument("--rating-note", help="why a rating was set or changed")
+    p.add_argument("--merge-after", help="PRs that must merge first, e.g. agent-config#7")
+    p.add_argument("--owner-actions", help="what Filipe does at merge: run install.sh, a migration, a setting")
+    p.add_argument("--id", type=int, help="change id (default: the current change)")
+    p.add_argument("--project")
+    p.add_argument("--no-sync", action="store_true", help="do not read the PR from GitHub")
+
+    p = add("set", cmd_set, "correct fields of the current change")
     p.add_argument("--id", type=int, help="change id (default: the current change)")
     p.add_argument("--project")
     p.add_argument("--summary", help="one or two sentences: what changed and why")
@@ -1778,7 +1950,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model")
     p.add_argument("--effort")
 
-    p = add("log", cmd_log, "append an event to the current change")
+    p = add("log", cmd_log, "append one event to the current change, for corrections (finish records the usual ones)")
     p.add_argument("kind", choices=list(LOG_KINDS), help="; ".join(f"{k}: {v}" for k, v in LOG_KINDS.items()))
     p.add_argument("note", nargs="?", help="what happened, in one line")
     p.add_argument("--reason", choices=list(ASK_REASONS), help="for ask: " + "; ".join(f"{k}: {v}" for k, v in ASK_REASONS.items()))
@@ -1804,7 +1976,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-roadmaps", action="store_true", help="skip the roadmap mirror")
     p.add_argument("--quiet", action="store_true")
 
-    p = add("brief", cmd_brief, "start-of-work context for this repo: what waits on Filipe, open lessons, recent rates")
+    p = add("brief", cmd_brief, "what `start` prints: open PRs with CI, conflicts and edited files, work in progress, open lessons")
     p.add_argument("--project")
     p.add_argument("--no-sync", action="store_true", help="do not refresh this project's PRs first")
 

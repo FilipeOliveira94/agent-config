@@ -69,18 +69,11 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 
 ## Change ledger
 
-Every change (a PR, or work meant to become one) has a row in the change ledger: a one-line summary, its Expected/Seen Risk and Size, and what it cost before the merge. It exists to raise the share of PRs that merge without rework and to cut the stops that need Filipe. The data is a SQLite file in WSL (`~/.local/share/change-ledger/ledger.db`), outside every repo; it is never committed or uploaded. The command is `change-ledger`, run inside the repo's checkout; `change-ledger <command> --help` lists the flags. A Windows-side session runs it as `wsl.exe -d Ubuntu --exec bash -lc 'cd ~/<repo> && change-ledger …'`.
+Every change (a PR, or work meant to become one) has a row in the change ledger: a one-line summary, its Expected/Seen Risk and Size, and what it cost before the merge. It is read after the work is done, to raise the share of PRs that merge without rework and to cut the stops that need Filipe. The data is a SQLite file in WSL (`~/.local/share/change-ledger/ledger.db`), outside every repo; it is never committed or uploaded. The command is `change-ledger`, run inside the repo's checkout; `change-ledger <command> --help` lists the flags. A Windows-side session runs it as `wsl.exe -d Ubuntu --exec bash -lc 'cd ~/<repo> && change-ledger …'`.
 
-- `issue-cycle` says when to write. GitHub facts (PR, lines, CI, conflicts, merge time) come from `change-ledger sync`: never type them in.
-- Never spend a turn on a ledger command alone. Run it in the same shell command as work you are already doing, such as `gh pr create … && change-ledger set … && change-ledger brief`, or in the same message as your next tool call. Each extra turn re-reads the whole conversation, about 125k tokens in a typical issue thread.
-- Log every stop for Filipe that is not the planned plan-approval gate, with its reason: `change-ledger log ask --reason <reason> "<the question>"`. Log his reply with `change-ledger log answer "<the answer, and the file that should have held it>"`.
-  - **decision:** a choice that is Filipe's (scope, product, trade-off) and the issue did not settle.
-  - **context:** information that should have been in the repo or the issue.
-  - **access:** a permission, credential, setting or tool the agent could not use.
-  - **correction:** Filipe corrected a result or a misunderstanding.
-  - **blocked:** an environment failure, such as a usage limit, a broken tool or CI infrastructure.
-- Log changes Filipe asks for after the PR opened: `change-ledger log feedback "<what>"`.
-- When a question, a feedback round or a second review round could have been avoided, record one lesson: `change-ledger lesson "<what would have prevented it>" --target <AGENTS.md, workflow.md, the issue, a test, CI>`. Applying it is a separate change that Filipe approves. Then run `change-ledger lesson --applied <N> --in <repo#PR>`.
+- An issue writes to it twice, as `issue-cycle` describes: `change-ledger start` when the work begins and `change-ledger finish` when the PR opens. In between, the agent lists each question to Filipe (with its reason), plan answer, review round, feedback round and lesson under "Questions and decisions" in the PR text, and `finish` records them. GitHub facts (PR, lines, CI, conflicts, merge time) come from `change-ledger sync`: never type them in.
+- Never spend a turn on a ledger command or a "Questions and decisions" line alone. Run it in the same shell command as work you are already doing, such as `gh pr create … && change-ledger finish …`, or in the same message as your next tool call. Each extra turn re-reads the whole conversation, about 125k tokens in a typical issue thread.
+- Applying a lesson is a separate change that Filipe approves. Then run `change-ledger lesson --applied <N> --in <repo#PR>`.
 
 ## Reviewers
 
