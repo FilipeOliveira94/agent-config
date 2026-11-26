@@ -11,7 +11,7 @@ description: >-
 
 # LinkedIn data post
 
-Personal skill for data-engineering posts: a portfolio project, a career project, a pipeline, or a lesson from one. It lives in the home skills directory. Cursor loads it from `~/.cursor/skills/linkedin-platform-post/`. Claude Code loads the same directory through `~/.claude/skills/linkedin-platform-post/`.
+Personal skill for data-engineering posts: a portfolio project, a career project, a pipeline, or a lesson from one. It lives in agent-config's `skills/` directory, and Claude Code loads it through `~/.claude/skills/linkedin-platform-post/`.
 
 Write new SVG templates in that directory's `templates/` folder. Write PNGs to `/tmp` unless the user names another path. Do not commit generated images into a project repo.
 
@@ -46,11 +46,11 @@ If docs and an older post disagree, follow the docs. Keep a source the user name
 
 ## Voice
 
-Portuguese first. Plain spoken Brazilian Portuguese, the way you would explain the work to another engineer. Short sentences. One idea each. The first line is a question, a concrete scene, or the result.
+Portuguese first. Plain spoken Brazilian Portuguese, the way you would explain the work to another engineer: full sentences joined the way you would say them, in paragraphs of two to five sentences, telling one story. The first line is a question the reader has asked themselves, a concrete scene, or the result.
 
-`a gente`, `pra`, `tá`, and `dá uma olhada` are fine when the sentence wants them. Do not force slang into every line. Stay in `você`. Do not switch to `tu` unless the user writes that way.
+Read Filipe's published posts in `plain-voice`'s `voice/samples.md` before drafting, and match their rhythm. Sentence shape and word choice follow `plain-voice` ("Sounding natural" and the Portuguese section). That skill is the one home for those rules.
 
-Tool names land after the idea is clear, tied to what they did. Skip the status-report shape, the slogan stack, and the opening that sounds translated: "é com grande alegria", "no mundo dos dados", "vamos mergulhar", "alavancar", "jornada" as filler.
+Tool names land after the idea is clear, tied to what they did. Skip the status-report shape and the slogan stack.
 
 Read it aloud. If you would not say it to a colleague, rewrite it.
 
@@ -147,3 +147,4 @@ After render, read the PNG and fix clipped or overlapping text before showing it
 - Tool names explain a step. They are not the opening.
 - The link exists. The hashtags match this post.
 - If there is a poster, the blocks match the post, and the PNG was read back.
+- Last pass: run the `plain-voice` skill (spoken register) over each post. It changes words and rhythm, never a claim.

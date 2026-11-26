@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Bug and risk review of a finished branch, for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. Run once before opening a PR with code or config changes, and again after each fix round, not after every edit. Pass the base branch (default `main`) and what the change is meant to do. A project can replace this agent with its own `.claude/agents/code-reviewer.md`.
+description: Bug and risk review of a finished branch, for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. Run once before opening a PR with code or config changes, and again after each fix round, not after every edit. Pass the base branch (default `main`) and what the change is meant to do. A project adds its own must-check items in `.claude/review-checklist.md`.
 model: claude-sonnet-5-5
 effort: high
 tools: Read, Grep, Glob, Bash
@@ -17,8 +17,9 @@ The caller passes the base branch and what the change is meant to do (the issue 
 ## What to read
 
 1. The whole change against the base: `git diff <base>...HEAD`, plus `git diff HEAD` and `git status --porcelain` for uncommitted and untracked files. Read untracked files in full. Plain `git diff` alone misses committed, staged and new files.
-2. The project's rules: `AGENTS.md`, `CLAUDE.md` and `.claude/rules/*.md`. A broken hard rule is a critical issue.
-3. Callers and callees of changed functions when the change alters a contract.
+2. The project's rules: `AGENTS.md`, `CLAUDE.md`, `.claude/rules/*.md`, and the files they import or tell you to read first (aconta's `context.md`, for example). A broken hard rule is a critical issue.
+3. The project's checklist, `.claude/review-checklist.md`, when it exists. Check every item in it against the change.
+4. Callers and callees of changed functions when the change alters a contract. In a repo with a `.codegraph/` folder, `codegraph callers <symbol>` and `codegraph impact <symbol>` through Bash list them; otherwise use Grep.
 
 ## What to look for
 
@@ -37,7 +38,8 @@ Skip formatting, naming and style unless they break a project convention.
 
 ## Output
 
-- **Verdict:** PASS | BLOCK | NEEDS INPUT (BLOCK when there is any critical issue)
+- **Verdict:** PASS | BLOCK | NEEDS INPUT (BLOCK when there is any critical issue, or when a checklist item fails)
+- **Checklist:** only when the project has `.claude/review-checklist.md`. Every item, numbered as in the file, as PASS / FAIL / N/A with `file:line` evidence.
 - **Critical issues:** `file:line: failure. Fix: one sentence.`
 - **Warnings:** non-blocking risks, up to 5.
 - **Not checked:** what you could not verify (for example tests that need Docker), or "none".

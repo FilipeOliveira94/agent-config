@@ -28,13 +28,14 @@ Above Sm + Lo in a `reviewed` project, run `po-reviewer` (mode `plan`) with the 
 
 Update `main` (`git pull`) and create a new branch from it.
 
-Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `code-structure` skill; the project's existing architecture prevails.
+Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `module-boundaries` skill; the project's existing architecture prevails.
 
 ## 3. Verify
 
 - Run the project's checks and tests. A check that was not run is not a pass; record the command and the output.
 - Exercise each behavior of the issue the way the user would. A behavior that was not exercised is not done; say which one was left out and why.
 - A green internal check is not enough if the user sees another surface. Look at that surface.
+- When the issue changes something a person sees or does in a browser, follow the `browser-proof` skill and put its statement table in the PR.
 
 ## 4. Review (profile `reviewed`)
 
@@ -43,6 +44,8 @@ With the branch ready and the checks run:
 - `code-reviewer` on every code or config change, with the base branch and the goal of the change. A docs-only or text-only change skips this gate.
 - The extra reviewers that the "Agent workflow" section lists, when their trigger matches. They live in the project's `.claude/agents/`.
 - Above Sm + Lo, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
+
+Check each finding against the code before acting on it: reproduce it, or trace the path it describes. Fix the ones that hold. Do not change code to satisfy a finding that does not hold; give the reviewer the evidence in the next round and note it in the PR.
 
 Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan ("Model policy" in `workflow.md`). Profile `solo`: skip this step.
 
@@ -54,5 +57,7 @@ Conventional commits, push of the branch and a PR with a summary:
 - checks and tests run, with the relevant output;
 - each reviewer's final verdict, or which gates were skipped and why;
 - what stays open or was left out.
+
+Once the title and body are written, run the `plain-voice` skill (engineering register) over them.
 
 Stop there. Do not merge, do not delete the branch, do not run CD. Fixes requested in review go in as new commits on the same branch.
