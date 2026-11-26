@@ -73,8 +73,8 @@ Conventional commits, push of the branch and a PR with a summary:
 
 Once the title and body are written, run the `plain-voice` skill (engineering register) over them.
 
-After the PR is open:
-- Run `change-ledger set --summary "<one or two sentences: what changed and why>" --seen-risk <Lo|Med|Hi> --seen-size <Sm|Md|Lg>`. Add `--merge-after <repo#N>` when another PR must merge first, and `--owner-actions "<what Filipe does at merge>"` when the merge needs a step from him (run `install.sh`, a migration, a setting).
-- Run `change-ledger brief` and read the line for this PR. Fix a failing check or a conflict with `main` before handing back, and name a check that is still pending in the handoff.
+Open the PR and update the ledger in one command: `gh pr create … && change-ledger set --summary "<one or two sentences: what changed and why>" --seen-risk <Lo|Med|Hi> --seen-size <Sm|Md|Lg> && change-ledger brief`.
+- Add `--merge-after <repo#N>` to `set` when another PR must merge first, and `--owner-actions "<what Filipe does at merge>"` when the merge needs a step from him (run `install.sh`, a migration, a setting).
+- Read the line `brief` prints for this PR. Fix a failing check or a conflict with `main` before handing back, and name a check that is still pending in the handoff.
 
 Stop there. Do not merge, do not delete the branch, do not run CD. Fixes requested in review go in as new commits on the same branch: first log the request with `change-ledger log feedback "<what Filipe asked>"`, and when the round could have been avoided, add a lesson ("Change ledger" in `workflow.md`).
