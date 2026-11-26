@@ -6,7 +6,7 @@ Filipe's agent setup: shared skills, Claude Code subagents, and the dev workflow
 
 | Path | Content | Where it lands |
 | --- | --- | --- |
-| `skills/<name>/` | Skills shared by Claude Code, Cursor and Codex | Linked into `~/.claude/skills/` and `~/.cursor/skills/`. Codex reads `~/.agents/skills/` directly |
+| `skills/<name>/` | Skills shared by Claude Code and Codex | Linked into `~/.claude/skills/`. Codex reads `~/.agents/skills/` directly |
 | `claude/workflow.md` | Dev workflow: language, roles, Size and Risk rating, review gates, model policy and escalation | Imported by `~/.claude/CLAUDE.md`, so every Claude Code session loads it |
 | `claude/agents/` | Subagents `po-reviewer` and `code-reviewer` (Sonnet 5.5) | Linked into `~/.claude/agents/` |
 | `claude/templates/agent-workflow.md` | The "Agent workflow" block each project keeps in its `AGENTS.md` | Copied by hand into a new project |
@@ -21,7 +21,7 @@ git clone https://github.com/FilipeOliveira94/agent-config.git ~/.agents
 
 The script is safe to re-run; run it again after a pull that adds or removes a skill or an agent. It:
 
-- links each skill into `~/.claude/skills/` and `~/.cursor/skills/`, and removes links there that point at skills this repo no longer has;
+- links each skill into `~/.claude/skills/`, and removes links there that point at skills this repo no longer has;
 - links each subagent into `~/.claude/agents/`;
 - adds `@~/.agents/claude/workflow.md` to `~/.claude/CLAUDE.md`;
 - adds the keys of `claude/settings.fragment.json` that `~/.claude/settings.json` does not have yet, after a timestamped backup. It never overwrites a value, so a model or effort set with `/model` or `/effort` stays. The file is merged, not linked, because Claude Code rewrites it.
@@ -72,6 +72,5 @@ Extra reviewers are subagent files in the project's own `.claude/agents/`. A pro
 
 | Agent | Path it reads, under that same home |
 | --- | --- |
-| Cursor | `.cursor/skills` |
 | Claude Code, and Claude threads in T3 Code | `.claude/skills`, `.claude/agents`, `.claude/CLAUDE.md` |
 | Codex | `.agents/skills` |

@@ -4,7 +4,6 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-CURSOR_SKILLS="$HOME/.cursor/skills"
 
 if [ "$REPO" != "$HOME/.agents" ]; then
   echo "warning: the repo is at $REPO, not ~/.agents. The projects' AGENTS.md files and Codex refer to ~/.agents; clone it there." >&2
@@ -33,14 +32,12 @@ prune() {  # remove links in <dir> that point into this repo and no longer resol
 }
 
 # Skills
-mkdir -p "$CLAUDE_HOME/skills" "$CURSOR_SKILLS"
+mkdir -p "$CLAUDE_HOME/skills"
 for s in "$REPO"/skills/*/; do
   s="${s%/}"
   link "$s" "$CLAUDE_HOME/skills/$(basename "$s")"
-  link "$s" "$CURSOR_SKILLS/$(basename "$s")"
 done
 prune "$CLAUDE_HOME/skills"
-prune "$CURSOR_SKILLS"
 
 # Subagents
 mkdir -p "$CLAUDE_HOME/agents"

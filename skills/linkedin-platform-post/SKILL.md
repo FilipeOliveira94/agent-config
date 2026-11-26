@@ -11,7 +11,7 @@ description: >-
 
 # LinkedIn data post
 
-Personal skill for data-engineering posts: a portfolio project, a career project, a pipeline, or a lesson from one. It lives in the home skills directory. Cursor loads it from `~/.cursor/skills/linkedin-platform-post/`. Claude Code loads the same directory through `~/.claude/skills/linkedin-platform-post/`.
+Personal skill for data-engineering posts: a portfolio project, a career project, a pipeline, or a lesson from one. It lives in agent-config's `skills/` directory, and Claude Code loads it through `~/.claude/skills/linkedin-platform-post/`.
 
 Write new SVG templates in that directory's `templates/` folder. Write PNGs to `/tmp` unless the user names another path. Do not commit generated images into a project repo.
 
