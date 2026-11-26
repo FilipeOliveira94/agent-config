@@ -196,12 +196,15 @@ class Parsing(unittest.TestCase):
             "- po-reviewer: ACCEPT WITH NOTES, DP-02 wording fixed",  # aconta #15, as po-reviewer wrote it
             "- po-reviewer: approved with notes", "- po-reviewer: Accept, fine", "- po-reviewer: REJECTED, AC 2 not met",
             "- po-reviewer: REJECT", "- privacy-auditor: FAIL, payload logged", "- code-reviewer: CHANGES  NEEDED, x",
-            "- po-reviewer: PASS (ACCEPT WITH NOTES), kept", "- po-reviewer: LGTM", "- po-reviewer: ACCEPTABLE"])
+            "- po-reviewer: PASS (ACCEPT WITH NOTES), kept", "- po-reviewer: LGTM", "- po-reviewer: ACCEPTABLE",
+            "- po-reviewer: accept with changes needed: fix X", "- code-reviewer: PASS with 2 warnings"])
         self.assertEqual([(e["verdict"], e["note"]) for e in events], [
             ("APPROVED", "ACCEPT WITH NOTES: DP-02 wording fixed"), ("APPROVED", "APPROVED WITH NOTES"),
             ("APPROVED", "ACCEPT: fine"), ("CHANGES NEEDED", "REJECTED: AC 2 not met"), ("CHANGES NEEDED", "REJECT"),
-            ("BLOCK", "FAIL: payload logged"), ("CHANGES NEEDED", "x"), ("PASS", "(ACCEPT WITH NOTES), kept")])
-        self.assertEqual(unknown, ["po-reviewer: LGTM", "po-reviewer: ACCEPTABLE"])
+            ("BLOCK", "FAIL: payload logged"), ("CHANGES NEEDED", "x"), ("PASS", "(ACCEPT WITH NOTES), kept"),
+            ("PASS", "with 2 warnings")])
+        self.assertEqual(unknown, ["po-reviewer: LGTM", "po-reviewer: ACCEPTABLE",
+                                   "po-reviewer: accept with changes needed: fix X"])
 
     def test_rework_counts_author_dates_from_the_start_of_review(self):
         def after_open(pr):
@@ -462,7 +465,10 @@ class Flow(unittest.TestCase):
         self.assertIn("2 reviews (1 blocking)", out)
         self.assertIn("a reviewer verdict is one of PASS, BLOCK, APPROVED, CHANGES NEEDED, NEEDS FILIPE, NEEDS INPUT",
                       err.getvalue())
-        self.run_cli("log", "review", "--actor", "privacy-auditor", "--verdict", "fail", "payload logged")
+        with mock.patch("sys.stderr", io.StringIO()) as err:
+            self.run_cli("log", "review", "--actor", "privacy-auditor", "--verdict", "fail", "payload logged")
+            self.run_cli("log", "review", "--actor", "migration-reviewer", "--verdict", "lgtm")
+        self.assertEqual(err.getvalue().count("is not one of"), 1)
         self.assertEqual(self.row()["review_blocks"], 2)
         self.assertEqual(self.query("SELECT verdict, note FROM events WHERE actor = 'privacy-auditor'"),
                          [{"verdict": "BLOCK", "note": "FAIL: payload logged"}])

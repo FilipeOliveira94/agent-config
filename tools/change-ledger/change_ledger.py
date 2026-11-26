@@ -84,7 +84,9 @@ REVIEW_DRIFT = {"APPROVED WITH NOTES": "APPROVED", "ACCEPT WITH NOTES": "APPROVE
                 "REJECTED": "CHANGES NEEDED", "REJECT": "CHANGES NEEDED", "FAIL": "BLOCK"}
 _VERDICT_WORDS = sorted((*REVIEW_VERDICTS, *REVIEW_DRIFT), key=len, reverse=True)  # longest first
 NOTE_REVIEW = re.compile(r"^([a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+)\s*:\s*"
-                         r"(" + "|".join(w.replace(" ", r"\s+") for w in _VERDICT_WORDS) + r")\b[\s,.:;-]*(.*)$", re.I)
+                         r"(" + "|".join(w.replace(" ", r"\s+") for w in _VERDICT_WORDS) + r")\b"
+                         r"(?:(?<!ACCEPT)|(?!\s+with\b))"  # "ACCEPT with changes ..." is conditional, not a verdict: warn
+                         r"[\s,.:;-]*(.*)$", re.I)
 NOTE_REVIEWER = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+\s*:", re.I)  # a reviewer line, any word
 NOTE_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")  # a bullet or a numbered item
 
@@ -1611,6 +1613,8 @@ def cmd_log(args) -> None:
         verdict = verdict.lower()
     elif kind == "review":
         verdict, note = review_verdict(verdict, note)
+        if verdict not in REVIEW_VERDICTS:
+            warn(f"review verdict {verdict!r} is not one of {', '.join(REVIEW_VERDICTS)}; recorded as written")
     round_no = None
     if kind == "plan":
         round_no = con.execute("SELECT COUNT(*) FROM events WHERE change_id = ? AND kind = 'plan'",
