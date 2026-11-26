@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -43,19 +44,25 @@ def ts(delta_hours: float) -> str:
 
 
 def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits=(-3.1,), checks=(),
-         mergeable="MERGEABLE", files=(("src/app.py", 120, 10), ("README.md", 30, 0)), bot=False):
-    """A pull request as the GraphQL query returns it."""
+         mergeable="MERGEABLE", files=(("src/app.py", 120, 10), ("README.md", 30, 0)), bot=False,
+         draft=False, first_event=None, more_files=False):
+    """A pull request as the GraphQL query returns it. Times are hours from now. first_event is the
+    first draft event on its timeline, e.g. ("ReadyForReviewEvent", -2); more_files says GitHub has a
+    second page of files (FakeGh.more_files)."""
+    events = [{"__typename": first_event[0], "createdAt": ts(first_event[1])}] if first_event else []
     return {
         "number": number, "title": title, "url": f"https://github.com/acme/demo/pull/{number}",
-        "state": state, "isDraft": False, "createdAt": ts(created),
+        "state": state, "isDraft": draft, "createdAt": ts(created),
         "mergedAt": ts(merged) if merged is not None else None,
         "closedAt": ts(merged) if merged is not None else None,
         "headRefName": branch, "additions": sum(f[1] for f in files), "deletions": sum(f[2] for f in files),
         "changedFiles": len(files), "mergeable": mergeable,
         "author": {"__typename": "Bot" if bot else "User", "login": "dependabot" if bot else "acme"},
         "comments": {"totalCount": 1}, "reviews": {"totalCount": 0},
-        "files": {"nodes": [{"path": p, "additions": a, "deletions": d} for p, a, d in files]},
-        "commits": {"nodes": [{"commit": {"committedDate": ts(c)}} for c in commits]},
+        "files": {"pageInfo": {"hasNextPage": more_files, "endCursor": "files-2" if more_files else None},
+                  "nodes": [{"path": p, "additions": a, "deletions": d} for p, a, d in files]},
+        "commits": {"totalCount": len(commits), "nodes": [{"commit": {"authoredDate": ts(c)}} for c in commits]},
+        "draftEvents": {"nodes": events},
         "last": {"nodes": [{"commit": {"statusCheckRollup": {"contexts": {"nodes": list(checks)}} if checks else None}}]},
     }
 
@@ -65,16 +72,31 @@ def check(name, conclusion, status="COMPLETED"):
 
 
 class FakeGh:
+    """Answers the three GraphQL queries from `prs` (newest first) and file GETs from `files`."""
+
     def __init__(self):
         self.prs = []
+        self.more_files = {}  # PR number -> the files on its second page
         self.files = {"ROADMAP.md": ROADMAP, "AGENTS.md": AGENTS}
         self.calls = []
 
     def __call__(self, args, timeout=120, retries=1):
         self.calls.append(args)
         if args[:2] == ["api", "graphql"]:
-            return json.dumps({"data": {"repository": {"pullRequests": {
-                "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": self.prs}}}})
+            fields = dict(a.split("=", 1) for a in args[3::2])  # -f/-F key=value pairs
+            query = fields["query"]
+            if "pullRequests(" in query:  # a page of the newest PRs
+                start, size = int(fields.get("after", 0)), int(fields["first"])
+                return json.dumps({"data": {"repository": {"pullRequests": {
+                    "pageInfo": {"hasNextPage": start + size < len(self.prs), "endCursor": str(start + size)},
+                    "nodes": self.prs[start:start + size]}}}})
+            if "files(first: 100, after:" in query:  # the next page of one PR's files
+                return json.dumps({"data": {"repository": {"pullRequest": {"files": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": self.more_files[int(fields["number"])]}}}}})
+            by_number = {pr["number"]: pr for pr in self.prs}  # PRs asked for by number
+            wanted = re.findall(r"p(\d+): pullRequest\(number: \d+\)", query)
+            return json.dumps({"data": {"repository": {f"p{n}": by_number.get(int(n)) for n in wanted}}})
         if args[0] == "api" and "contents/" in args[-1]:
             path = args[-1].split("contents/", 1)[1]
             if path in self.files:
@@ -142,6 +164,23 @@ class Parsing(unittest.TestCase):
         fields = cl.pr_fields(pr)
         self.assertEqual((fields["code_lines"], fields["doc_lines"]), (120, 30))
         self.assertEqual(fields["commits_after_open"], 0)
+
+    def test_rework_counts_author_dates_from_the_start_of_review(self):
+        def after_open(pr):
+            return cl.pr_fields(cl.normalize_pr(pr))["commits_after_open"]
+
+        rebased = node(1, "feat: x", "feat/x", created=-5, commits=(-6.0, -5.5))
+        for item in rebased["commits"]["nodes"]:
+            item["commit"]["committedDate"] = ts(-0.1)  # a rebase rewrites commit dates, not author dates
+        self.assertEqual(after_open(rebased), 0)
+        self.assertEqual(after_open(node(2, "feat: y", "feat/y", draft=True, created=-5, commits=(-4.0,))), 0)
+        ready = node(3, "feat: z", "feat/z", created=-5, commits=(-4.0, -1.0), first_event=("ReadyForReviewEvent", -2))
+        self.assertEqual(after_open(ready), 1)
+        self.assertEqual(cl.pr_fields(cl.normalize_pr(ready))["opened_at"], ready["draftEvents"]["nodes"][0]["createdAt"])
+        # opened for review, then turned into a draft: review began when the PR opened
+        converted = node(4, "feat: w", "feat/w", draft=True, created=-5, commits=(-6.0, -4.0),
+                         first_event=("ConvertToDraftEvent", -3))
+        self.assertEqual(after_open(converted), 1)
 
 
 class Flow(unittest.TestCase):
@@ -270,6 +309,58 @@ class Flow(unittest.TestCase):
         before = len(self.query("SELECT id FROM events"))
         self.run_cli("sync")  # nothing changed on GitHub: no new events
         self.assertEqual(len(self.query("SELECT id FROM events")), before)
+
+    def test_sync_reads_open_prs_that_fell_out_of_the_window(self):
+        self.fake.prs = [node(1, "feat: old work", "feat/old-work", created=-50)]
+        self.run_cli("sync", "--no-roadmaps")
+        self.assertEqual(self.row()["status"], "pr_open")
+        self.fake.prs = [node(3, "docs: c", "docs/c", created=-1), node(2, "docs: b", "docs/b", created=-2),
+                         node(1, "feat: old work", "feat/old-work", state="MERGED", created=-50, merged=-0.5)]
+        self.run_cli("sync", "--no-roadmaps", "--limit", "2")  # the window holds #3 and #2 only
+        self.assertEqual(self.row()["status"], "merged")
+        self.assertTrue(any("p1: pullRequest(number: 1)" in " ".join(call) for call in self.fake.calls))
+
+    def test_a_draft_is_in_progress_until_it_is_marked_ready(self):
+        self.fake.prs = [node(6, "feat: draft", "feat/draft", draft=True, created=-5, commits=(-5.1, -3.0))]
+        self.run_cli("sync", "--no-roadmaps")
+        r = self.row()
+        self.assertEqual((r["status"], r["opened_at"], r["commits_after_open"]), ("in_progress", None, 0))
+        brief = self.run_cli("brief", "--no-sync")
+        self.assertIn("Waiting on Filipe: nothing", brief)
+        self.assertIn("(draft PR #6)", brief)
+        ready = node(6, "feat: draft", "feat/draft", created=-5, commits=(-5.1, -3.0, -0.5),
+                     first_event=("ReadyForReviewEvent", -2))
+        self.fake.prs = [ready]
+        self.run_cli("sync", "--no-roadmaps")
+        r = self.row()
+        self.assertEqual((r["status"], r["opened_at"], r["commits_after_open"]),
+                         ("pr_open", ready["draftEvents"]["nodes"][0]["createdAt"], 1))
+        self.assertEqual(self.kinds(), ["pr_opened", "ready"])
+
+    def test_a_large_pr_counts_files_past_the_first_page(self):
+        self.fake.prs = [node(4, "feat: big", "feat/big", more_files=True)]
+        self.fake.more_files[4] = [{"path": "src/more.py", "additions": 900, "deletions": 0}]
+        self.run_cli("sync", "--no-roadmaps")
+        r = self.row()
+        self.assertEqual((r["code_lines"], r["measured_size"]), (1020, "Lg"))
+
+    def test_set_pr_takes_over_the_row_sync_recorded(self):
+        self.git("checkout", "-q", "-b", "feat/p1-04-reset")
+        self.run_cli("start", "--title", "Password reset", "--issue", "P1-04")
+        self.run_cli("log", "ask", "--reason", "decision", "email or SMS?")
+        self.fake.prs = [node(9, "fix: reset", "fix/reset-renamed")]  # opened from another branch name
+        self.run_cli("sync", "--no-roadmaps")
+        self.assertEqual(len(self.query("SELECT id FROM changes")), 2)
+        self.assertIn("PR #9", self.run_cli("set", "--pr", "9"))
+        rows = self.query("SELECT * FROM v_changes")
+        self.assertEqual([(r["id"], r["pr"], r["status"], r["asks"]) for r in rows], [(1, 9, "pr_open", 1)])
+        self.assertEqual(self.kinds(), ["start", "ask", "pr_opened", "note"])
+        second = re.match(r"#(\d+) ", self.run_cli("start", "--title", "Second try", "--new")).group(1)
+        err = io.StringIO()
+        with (self.assertRaises(SystemExit) as caught, redirect_stdout(io.StringIO()), mock.patch("sys.stderr", err)):
+            cl.main(["set", "--id", second, "--pr", "9"])  # #1, an agent's change, holds PR 9 now
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("PR #9 already belongs to change #1", err.getvalue())
 
     def test_logging_needs_an_open_change(self):
         with (self.assertRaises(SystemExit) as caught, redirect_stdout(io.StringIO()),

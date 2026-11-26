@@ -62,20 +62,20 @@ What a change records:
 | Summary | Agent, after opening the PR | What changed and why, in one or two sentences |
 | Expected/Seen Risk, Expected/Seen Size | Agent; otherwise the issue's rating from the roadmap | Same tags and `expected/seen` cells as the roadmaps |
 | Rating note | Agent | Why a rating was set or raised |
-| Status and outcome | `log` and sync | planning → awaiting_approval → in_progress → pr_open → merged or closed. Outcome: clean merge, merged after rework, open, dropped |
+| Status and outcome | `log` and sync | planning → awaiting_approval → in_progress → pr_open → merged or closed. A draft PR stays in_progress until it is marked ready. Outcome: clean merge, merged after rework, open, dropped |
 | Code lines, doc lines, measured size | Sync | Lines added outside docs, lockfiles, generated files and binaries, on the Sm/Md/Lg scale, to check the seen size |
-| Commits after opening, feedback rounds | Sync; agent `log feedback` | Rework once the PR was up |
+| Commits after opening, feedback rounds | Sync; agent `log feedback` | Rework once the PR was up for review. A commit counts by its author date, so a rebase alone adds none |
 | CI, mergeable, conflicted | Sync | Red checks and conflicts on open PRs. Conflicted stays set once a sync saw a conflict |
 | Edited paths | Sync | `brief` shows them, so overlap with an open PR shows before planning |
 | Questions by reason | Agent `log ask` | Why work stopped for Filipe: decision, context, access, correction, blocked |
 | Plan rounds and rejections, review rounds and blocks | Agent `log` | Where rework came from before the PR |
 | Merge after, owner actions | Agent | Merge order and the step Filipe takes at merge, shown in `brief` and the report |
 | Model, effort, T3 thread, profile | `start`, from the session | The model policy in practice (Fable on at most 10% of issues), effort against outcome, the thread to reopen |
-| Opened, merged, time to merge | Sync | How long PRs wait |
+| Opened, merged, time to merge | Sync | How long PRs wait. Opened is when the PR was up for review: for a draft, when it was marked ready |
 | Lessons | Agent `lesson` | What would have prevented a question or a rework round, where the fix belongs, and the PR that applied it |
 
 Definitions:
-- **Clean merge:** merged with no commit after the PR opened and no feedback round.
+- **Clean merge:** merged with no commit written after the PR was up for review and no feedback round.
 - **Merge rate:** merged PRs out of merged plus closed-without-merging PRs.
 - **Questions per change:** counted only on changes agents started with `start`, because PRs found by sync carry no events.
 - **Dependabot:** its PRs show in "waiting on Filipe" but stay out of the rates.

@@ -213,9 +213,9 @@ button.more { font: inherit; font-size: 13px; color: var(--link); background: no
   <section class="card">
     <h2>How the numbers are counted</h2>
     <dl class="defs">
-      <dt>Clean merge</dt><dd>Merged with no commit pushed after the PR opened and no feedback round logged.</dd>
+      <dt>Clean merge</dt><dd>Merged with no commit written after the PR was up for review and no feedback round logged.</dd>
       <dt>Merge rate</dt><dd>Merged PRs out of merged plus closed-without-merging PRs.</dd>
-      <dt>Rework commits</dt><dd>Commits pushed after the PR opened: review fixes, CI fixes, conflict merges.</dd>
+      <dt>Rework commits</dt><dd>Commits written after the PR was up for review (a draft: after it was marked ready): review fixes, CI fixes, conflict merges. Counted by author date, so a rebase alone adds none.</dd>
       <dt>Questions</dt><dd>Stops for you outside the planned plan-approval gate, logged with <code>change-ledger log ask</code>. Per change counts only changes agents started in the ledger.</dd>
       <dt>Expected/Seen</dt><dd>The ledger's rating for the change, else the issue's rating in the roadmap on the default branch. <code>-</code> is a half not filled yet.</dd>
       <dt>Code lines</dt><dd>Lines added outside docs, lockfiles, generated files and binaries. Measured size: Sm up to 400, Md up to 1,000, Lg above (the scale in <code>workflow.md</code>).</dd>

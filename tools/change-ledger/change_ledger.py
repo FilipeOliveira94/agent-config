@@ -29,7 +29,10 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# CREATE ... IF NOT EXISTS never changes a table that already exists: bumping SCHEMA_VERSION needs an
+# entry in MIGRATIONS with the statements that take version N-1 to N.
 SCHEMA_VERSION = 1
+MIGRATIONS: dict[int, tuple[str, ...]] = {}
 VIEWS_VERSION = "1"
 
 RISKS = ("Lo", "Med", "Hi")
@@ -228,7 +231,7 @@ CREATE TABLE IF NOT EXISTS events (
   change_id INTEGER NOT NULL REFERENCES changes(id) ON DELETE CASCADE,
   ts        TEXT NOT NULL,
   kind      TEXT NOT NULL,   -- start, rated, plan, approved, rejected, ask, answer, checks, review,
-                             -- feedback, note; from sync: pr_opened, ci, conflict, merged, closed
+                             -- feedback, note; from sync: pr_opened, ready, ci, conflict, merged, closed
   reason    TEXT,            -- ask: decision | context | access | correction | blocked
   actor     TEXT,            -- dev, filipe, a reviewer's name, github
   verdict   TEXT,            -- review or checks verdict, CI state
@@ -356,14 +359,26 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     version = con.execute("PRAGMA user_version").fetchone()[0]
     if version > SCHEMA_VERSION:
         die(f"{path} uses schema {version}; this change-ledger knows {SCHEMA_VERSION}. Pull agent-config.")
-    if version < SCHEMA_VERSION:
-        con.executescript(SCHEMA + f"\nPRAGMA user_version = {SCHEMA_VERSION};")
+    # Each upgrade runs under BEGIN IMMEDIATE: a second process starting at the same moment waits for
+    # the first one instead of colliding with it.
+    if version == 0:  # a new database; IF NOT EXISTS makes a second run harmless
+        con.executescript(f"BEGIN IMMEDIATE;\n{SCHEMA}\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;")
+    elif version < SCHEMA_VERSION:
+        con.execute("BEGIN IMMEDIATE")
+        version = con.execute("PRAGMA user_version").fetchone()[0]  # another process may have upgraded it
+        for step in range(version + 1, SCHEMA_VERSION + 1):
+            if step not in MIGRATIONS:
+                con.rollback()
+                die(f"{path}: no migration to schema {step}")
+            for statement in MIGRATIONS[step]:
+                con.execute(statement)
+        con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        con.commit()
     views = con.execute("SELECT value FROM meta WHERE key = 'views'").fetchone()
     if not views or views[0] != VIEWS_VERSION:
-        con.executescript("DROP VIEW IF EXISTS v_changes;\n" + VIEWS)
-        con.execute("INSERT INTO meta(key, value) VALUES ('views', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (VIEWS_VERSION,))
-        con.commit()
+        con.executescript(f"BEGIN IMMEDIATE;\nDROP VIEW IF EXISTS v_changes;\n{VIEWS}\n"
+                          f"INSERT INTO meta(key, value) VALUES ('views', '{VIEWS_VERSION}') "
+                          "ON CONFLICT(key) DO UPDATE SET value = excluded.value;\nCOMMIT;")
     return con
 
 
@@ -646,25 +661,44 @@ def gh(args: list[str], timeout: int = 120, retries: int = 1) -> str:
 
 # Only the fields the ledger uses, so a page of 50 PRs stays far below GraphQL's node limit
 # (`gh pr list --json commits` also pulls every commit's authors and hits it at 100 PRs).
+# commits(last: 100): rework commits are the newest ones. draftEvents: the first of these events tells
+# whether the PR opened as a draft (ReadyForReviewEvent first) or was converted later.
+PR_FIELDS = """
+fragment pr on PullRequest {
+  number title url state isDraft createdAt mergedAt closedAt headRefName
+  additions deletions changedFiles mergeable
+  author { __typename login }
+  comments { totalCount }
+  reviews { totalCount }
+  files(first: 100) { pageInfo { hasNextPage endCursor } nodes { path additions deletions } }
+  commits(last: 100) { totalCount nodes { commit { authoredDate } } }
+  draftEvents: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT], first: 1) {
+    nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ConvertToDraftEvent { createdAt } }
+  }
+  last: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 50) { nodes {
+    __typename
+    ... on CheckRun { name status conclusion }
+    ... on StatusContext { context state }
+  } } } } } }
+}
+"""
+
 PR_QUERY = """
 query($owner: String!, $name: String!, $first: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequests(first: $first, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) {
       pageInfo { hasNextPage endCursor }
-      nodes {
-        number title url state isDraft createdAt mergedAt closedAt headRefName
-        additions deletions changedFiles mergeable
-        author { __typename login }
-        comments { totalCount }
-        reviews { totalCount }
-        files(first: 100) { nodes { path additions deletions } }
-        commits(first: 100) { nodes { commit { committedDate } } }
-        last: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 50) { nodes {
-          __typename
-          ... on CheckRun { name status conclusion }
-          ... on StatusContext { context state }
-        } } } } } }
-      }
+      nodes { ...pr }
+    }
+  }
+}
+""" + PR_FIELDS
+
+FILES_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $after: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path additions deletions } }
     }
   }
 }
@@ -678,33 +712,52 @@ def normalize_pr(node: dict) -> dict:
         login = f"app/{login}"  # the form `gh pr list` prints, e.g. app/dependabot
     last = (node.get("last") or {}).get("nodes") or [{}]
     rollup = (last[0].get("commit") or {}).get("statusCheckRollup") or {}
+    files = node.get("files") or {}
+    more_files = files.get("pageInfo") or {}
+    commits = node.get("commits") or {}
+    first_event = ((node.get("draftEvents") or {}).get("nodes") or [None])[0] or {}
+    ready_at = first_event.get("createdAt") if first_event.get("__typename") == "ReadyForReviewEvent" else None
+    if ready_at:
+        review_since = ready_at  # opened as a draft: review starts when it was marked ready
+    elif node.get("isDraft") and not first_event:
+        review_since = None  # a draft that was never ready for review
+    else:
+        review_since = node.get("createdAt")
     return {
         "number": node["number"], "title": node.get("title"), "url": node.get("url"),
         "state": node.get("state"), "isDraft": node.get("isDraft"), "createdAt": node.get("createdAt"),
+        "readyAt": ready_at, "reviewSince": review_since,
         "mergedAt": node.get("mergedAt"), "closedAt": node.get("closedAt"),
         "headRefName": node.get("headRefName"), "additions": node.get("additions"),
         "deletions": node.get("deletions"), "changedFiles": node.get("changedFiles"),
         "mergeable": node.get("mergeable"), "author": {"login": login},
         "comments_count": (node.get("comments") or {}).get("totalCount", 0),
         "reviews_count": (node.get("reviews") or {}).get("totalCount", 0),
-        "files": (node.get("files") or {}).get("nodes") or [],
-        "commits": [n.get("commit") or {} for n in (node.get("commits") or {}).get("nodes") or []],
+        "files": files.get("nodes") or [],
+        "files_after": more_files.get("endCursor") if more_files.get("hasNextPage") else None,
+        "commits": [n.get("commit") or {} for n in commits.get("nodes") or []],
+        "commit_count": commits.get("totalCount"),
         "statusCheckRollup": (rollup.get("contexts") or {}).get("nodes") or [],
     }
 
 
+def graphql(query: str, **variables) -> dict:
+    """The `data` of a read-only GraphQL query; ints go as typed fields (-F), the rest as strings (-f)."""
+    args = ["api", "graphql", "-f", f"query={query}"]
+    for key, value in variables.items():
+        if value is not None:
+            args += ["-F" if isinstance(value, int) else "-f", f"{key}={value}"]
+    return json.loads(gh(args) or "{}").get("data") or {}
+
+
 def fetch_prs(repo: str, limit: int) -> list[dict]:
-    """The most recent `limit` PRs of owner/name, newest first. A read-only GraphQL query."""
+    """The most recent `limit` PRs of owner/name, newest first."""
     owner, name = repo.split("/", 1)
     prs: list[dict] = []
     after = None
     while len(prs) < limit:
-        args = ["api", "graphql", "-f", f"query={PR_QUERY}", "-f", f"owner={owner}", "-f", f"name={name}",
-                "-F", f"first={min(50, limit - len(prs))}"]
-        if after:
-            args += ["-f", f"after={after}"]
-        data = json.loads(gh(args) or "{}")
-        repository = (data.get("data") or {}).get("repository")
+        repository = graphql(PR_QUERY, owner=owner, name=name, first=min(50, limit - len(prs)),
+                             after=after).get("repository")
         if repository is None:
             raise GhError(f"{repo}: repository not found or not visible to gh")
         page = repository["pullRequests"]
@@ -712,6 +765,33 @@ def fetch_prs(repo: str, limit: int) -> list[dict]:
         if not page["pageInfo"]["hasNextPage"]:
             break
         after = page["pageInfo"]["endCursor"]
+    return complete_files(repo, prs)
+
+
+def fetch_prs_by_number(repo: str, numbers: list[int]) -> list[dict]:
+    """Given PRs of owner/name, 25 per query."""
+    owner, name = repo.split("/", 1)
+    prs: list[dict] = []
+    for i in range(0, len(numbers), 25):
+        fields = " ".join(f"p{int(n)}: pullRequest(number: {int(n)}) {{ ...pr }}" for n in numbers[i:i + 25])
+        query = ("query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { "
+                 + fields + " } }" + PR_FIELDS)
+        repository = graphql(query, owner=owner, name=name).get("repository") or {}
+        prs += [normalize_pr(n) for n in repository.values() if n]
+    return complete_files(repo, prs)
+
+
+def complete_files(repo: str, prs: list[dict]) -> list[dict]:
+    """Read the files past the first 100 of a large PR, so its line counts cover every file."""
+    owner, name = repo.split("/", 1)
+    for pr in prs:
+        after = pr.pop("files_after", None)
+        while after:
+            data = graphql(FILES_QUERY, owner=owner, name=name, number=pr["number"], after=after)
+            files = ((data.get("repository") or {}).get("pullRequest") or {}).get("files") or {}
+            pr["files"] = pr["files"] + (files.get("nodes") or [])
+            page = files.get("pageInfo") or {}
+            after = page.get("endCursor") if page.get("hasNextPage") else None
     return prs
 
 
@@ -857,12 +937,15 @@ def pr_fields(pr: dict) -> dict:
             doc += added
         weighted.append((added + (item.get("deletions") or 0), path))
     weighted.sort(key=lambda w: (-w[0], w[1]))
-    opened = parse_ts(pr.get("createdAt"))
+    created = parse_ts(pr.get("createdAt"))
+    # Rework is counted from the moment the PR is up for review (a draft: when it was marked ready).
+    # Author dates survive a rebase, commit dates do not, so a rebase alone does not count as rework.
+    opened = parse_ts(pr["reviewSince"]) if "reviewSince" in pr else created
     commits = pr.get("commits") or []
     after = 0
     if opened:
         for commit in commits:
-            when = parse_ts(commit.get("committedDate"))
+            when = parse_ts(commit.get("authoredDate"))
             if when and when > opened + timedelta(seconds=90):
                 after += 1
     ci, failing = ci_state(pr.get("statusCheckRollup"))
@@ -877,15 +960,17 @@ def pr_fields(pr: dict) -> dict:
         "code_lines": code,
         "doc_lines": doc,
         "paths": json.dumps([p for _, p in weighted[:40]]),
-        "commits": len(commits),
+        "commits": pr["commit_count"] if pr.get("commit_count") is not None else len(commits),
         "commits_after_open": after,
         "ci": ci,
         "failing": failing,
         "mergeable": pr.get("mergeable") or None,
         "gh_comments": (pr.get("comments_count") or 0) + (pr.get("reviews_count") or 0),
-        "opened_at": iso(opened),
+        "opened_at": iso(opened),  # up for review; None while the PR is a draft that was never ready
         "merged_at": iso(parse_ts(pr.get("mergedAt"))),
         "closed_at": iso(parse_ts(pr.get("closedAt"))),
+        "created": iso(created),  # not stored: the time of the pr_opened event and of a new row
+        "draft": bool(pr.get("isDraft")),
     }
 
 
@@ -905,18 +990,23 @@ def upsert_pr(con, project, pr: dict) -> tuple[int, int]:
     title = pr.get("title") or f"PR #{f['pr']}"
     created = row is None
     if created:
-        ts = f["opened_at"] or iso(now_utc())
+        ts = f["created"] or iso(now_utc())
         cur = con.execute(
             "INSERT INTO changes(project, issue, title, kind, status, profile, source, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, 'pr_open', ?, 'github', ?, ?)",
             (name, issue_of(title, f["branch"]), title, kind_of(title, f["branch"]), project["profile"], ts, ts))
         row = get_change(con, cur.lastrowid)
     status = STATE_TO_STATUS.get(pr.get("state"), row["status"])
+    if status == "pr_open" and f["draft"]:  # a draft is still being worked on, not waiting on Filipe
+        status = row["status"] if row["status"] in ("planning", "awaiting_approval", "in_progress") else "in_progress"
     if row["status"] == "abandoned" and status == "closed":
         status = "abandoned"
     events = []
     if row["pr"] is None:
-        events.append({"kind": "pr_opened", "ts": f["opened_at"], "actor": "github", "note": f"PR #{f['pr']}"})
+        events.append({"kind": "pr_opened", "ts": f["created"], "actor": "github",
+                       "note": f"PR #{f['pr']}" + (" as a draft" if f["draft"] else "")})
+    elif status == "pr_open" and row["status"] == "in_progress" and pr.get("readyAt"):
+        events.append({"kind": "ready", "ts": pr["readyAt"], "actor": "github", "note": "marked ready for review"})
     if status == "merged" and row["status"] != "merged":
         events.append({"kind": "merged", "ts": f["merged_at"], "actor": "github"})
     if status == "closed" and row["status"] not in ("closed", "abandoned"):
@@ -954,17 +1044,27 @@ def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool =
         projects = [p for p in projects if p["name"] in names]
     ok = True
     for project in projects:
+        # Every read from GitHub happens before the first write, so no write transaction stays open
+        # while gh runs; another agent's `log` would otherwise wait on it and fail with "locked".
         try:
             prs = fetch_prs(project["repo"], limit)
         except GhError as err:
             warn(f"{project['name']}: {err}")
             ok = False
             continue
-        created = updated = 0
-        for pr in prs:
-            c, u = upsert_pr(con, project, pr)
-            created, updated = created + c, updated + u
-        note = ""
+        seen = {pr["number"] for pr in prs}
+        # A PR still open in the ledger but older than the window (many newer PRs since) is read by
+        # number; otherwise it would stay open here after GitHub merged or closed it.
+        behind = sorted(r["pr"] for r in con.execute(
+            "SELECT pr FROM changes WHERE project = ? AND pr IS NOT NULL "
+            "AND status NOT IN ('merged', 'closed', 'abandoned')", (project["name"],)) if r["pr"] not in seen)
+        if behind:
+            try:
+                prs += fetch_prs_by_number(project["repo"], behind)
+            except GhError as err:
+                warn(f"{project['name']}: PRs {', '.join(f'#{n}' for n in behind)}: {err}")
+                ok = False
+        found = agents = None
         if roadmaps:  # the default branch is the truth: local checkouts often sit on old branches
             try:
                 found = fetch_roadmap(project["repo"])
@@ -972,12 +1072,17 @@ def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool =
             except GhError as err:
                 warn(f"{project['name']} roadmap: {err}")
                 found = agents = None
-            if found:
-                note = f", {import_roadmap(con, project['name'], *found)} roadmap issues"
-            if agents is not None:
-                m = PROFILE_RE.search(agents)
-                con.execute("UPDATE projects SET profile = ? WHERE name = ?",
-                            (m.group(1).lower() if m else None, project["name"]))
+        created = updated = 0
+        for pr in prs:
+            c, u = upsert_pr(con, project, pr)
+            created, updated = created + c, updated + u
+        note = ""
+        if found:
+            note = f", {import_roadmap(con, project['name'], *found)} roadmap issues"
+        if agents is not None:
+            m = PROFILE_RE.search(agents)
+            con.execute("UPDATE projects SET profile = ? WHERE name = ?",
+                        (m.group(1).lower() if m else None, project["name"]))
         con.execute("UPDATE projects SET synced_at = ? WHERE name = ?", (iso(now_utc()), project["name"]))
         con.commit()
         report(f"{project['name']}: {len(prs)} PRs read, {created} new, {updated} updated{note}")
@@ -1187,7 +1292,18 @@ def cmd_set(args) -> None:
         updates["issue"] = norm_issue(args.issue) or args.issue.strip()
     if args.kind:
         updates["kind"] = args.kind.lower()
+    took_over = None
     if args.pr is not None:
+        other = con.execute("SELECT * FROM changes WHERE project = ? AND pr = ? AND id <> ?",
+                            (row["project"], args.pr, row["id"])).fetchone()
+        if other is not None and other["source"] != "github":
+            die(f"PR #{args.pr} already belongs to change #{other['id']}; pass --id {other['id']} to work on it", 2)
+        if other is not None:  # sync recorded the PR before this change claimed it: fold that row into this one
+            con.execute("UPDATE events SET change_id = ? WHERE change_id = ?", (row["id"], other["id"]))
+            con.execute("UPDATE lessons SET change_id = ? WHERE change_id = ?", (row["id"], other["id"]))
+            con.execute("DELETE FROM changes WHERE id = ?", (other["id"],))
+            updates.update({k: other[k] for k in (*SYNCED_FIELDS, "status", "conflicted")})
+            took_over = f"took over PR #{args.pr} from change #{other['id']}, which sync had recorded"
         updates["pr"] = args.pr
     if args.status:
         updates["status"] = validated(args.status, STATUSES, "--status")
@@ -1204,6 +1320,8 @@ def cmd_set(args) -> None:
     if not updates:
         die("nothing to set: pass at least one field (see `change-ledger set --help`)", 2)
     update_change(con, row["id"], **updates)
+    if took_over:
+        add_event(con, row["id"], "note", actor="dev", note=took_over)
     if rating_changes:
         add_event(con, row["id"], "rated", actor="dev",
                   note="; ".join(rating_changes) + (f" ({args.rating_note})" if args.rating_note else ""))
@@ -1344,7 +1462,8 @@ def cmd_brief(args) -> None:
     if active:
         out.append("In progress: " + "; ".join(
             f"#{r['id']}{' ' + r['issue'] if r['issue'] else ''} {short(r['title'], 40)}"
-            + (f" ({r['branch']})" if r["branch"] else "") for r in active[:5]))
+            + (f" (draft PR #{r['pr']})" if r["pr"] else f" ({r['branch']})" if r["branch"] else "")
+            for r in active[:5]))
     lessons = con.execute("SELECT * FROM lessons WHERE project = ? AND state = 'open' ORDER BY id DESC",
                           (name,)).fetchall()
     if lessons:
@@ -1684,14 +1803,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args, extra = parser.parse_known_args(argv)
+    # Python 3.10 and 3.11 leave the text of `log ask --reason context "text"` unparsed when it follows
+    # an option (3.12 and later fill it in): take one leftover word as that text.
+    text_arg = {cmd_log: "note", cmd_lesson: "text"}.get(getattr(args, "func", None))
+    if text_arg and len(extra) == 1 and not extra[0].startswith("-") and getattr(args, text_arg) is None:
+        setattr(args, text_arg, extra.pop())
+    if extra:
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.db:
         os.environ["CHANGE_LEDGER_DB"] = args.db
     try:
         args.func(args)
     except GhError as err:
         die(str(err))
-    except sqlite3.OperationalError as err:
+    except sqlite3.DatabaseError as err:  # locked, constraint, corrupt file: a message, not a traceback
         die(f"database error: {err}")
     finally:
         while _CONNECTIONS:
