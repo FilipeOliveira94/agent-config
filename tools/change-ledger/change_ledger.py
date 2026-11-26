@@ -1614,7 +1614,8 @@ def cmd_finish(args) -> None:
         info = checkout_info(Path.cwd())
         rule = read_plan_stops(info[2]) if info and info[0] == row["project"] else None
         if plan_stops(r["risk_expected"], r["size_expected"], rule):
-            why = "the project's \"Plan stops\" line" if rule else "workflow.md (above Sm + Lo)"
+            why = ("the project's \"Plan stops\" line" if rule else
+                   "workflow.md's default (above Sm + Lo; this checkout states no \"Plan stops\" rule)")
             warn(f"rated {r['risk_expected']}/{r['size_expected']}, so the plan went to Filipe under {why}: "
                  f"add its \"- plan approved: …\" line under \"{NOTES_HEADING}\" and run finish again")
     reasons = ", ".join(f"{k} {r['asks_' + k]}" for k in ASK_REASONS if r["asks_" + k])

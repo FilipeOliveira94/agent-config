@@ -475,11 +475,11 @@ class Flow(unittest.TestCase):
         self.assertIn("rated Lo/Lg, so the plan went", self.finish_warning("Lo", "Lg", aconta))
 
     def test_finish_without_a_plan_stops_rule_uses_the_default(self):
-        self.assertIn("rated Med/Sm, so the plan went to Filipe under workflow.md",
+        self.assertIn("rated Med/Sm, so the plan went to Filipe under workflow.md's default",
                       self.finish_warning("Med", "Sm"))
         self.assertNotIn("plan went to Filipe", self.finish_warning("Lo", "Sm"))
         default = AGENTS + "- **Plan stops:** above Sm + Lo (workflow.md default)\n"
-        self.assertIn("rated Lo/Md, so the plan went to Filipe under workflow.md",
+        self.assertIn("rated Lo/Md, so the plan went to Filipe under workflow.md's default",
                       self.finish_warning("Lo", "Md", default))
 
     def test_drift_verdicts_count_as_blocking_and_unknown_words_get_the_list(self):
