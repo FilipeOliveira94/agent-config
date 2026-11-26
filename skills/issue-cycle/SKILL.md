@@ -7,7 +7,7 @@ description: "Takes an issue (or phase) from plan to an open PR for Filipe to re
 
 One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Cycle: start → rate size and risk → plan → (above Sm + Lo: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's: the agent never merges and never deletes a branch.
+Cycle: start → rate size and risk → plan → (when the plan stops: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's: the agent never merges and never deletes a branch.
 
 The change ledger ("Change ledger" in `workflow.md`) is written twice, each time inside a command you are running anyway: `change-ledger start` when the work begins and `change-ledger finish` when the PR opens. Run both from the repo's checkout. They find the change from the git branch or the T3 thread; on `main` outside T3, pass `--id <change id>` from `start`.
 
@@ -32,7 +32,7 @@ The section is published with the PR, so Filipe sees it in review. Never put sec
 Every issue carries a Size (Sm, Md, Lg) and a Risk (Lo, Med, Hi) on the scale in `workflow.md`. Use the expected half of the roadmap's "Expected/Seen Risk" and "Expected/Seen Size" columns; if there is none, estimate it in the plan with one line of reasoning and record the expected half in the same PR (format in `workflow.md`). The rating decides:
 
 - **Sm + Lo:** plan and implement straight through to the PR.
-- **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
+- **Anything else:** plan and **stop**, unless the project's `Plan stops` line ("What the rating decides" in `workflow.md`) leaves this rating out; then go on to the PR and keep the other review gates. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
 - **Hi risk or Lg size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your model or effort by yourself; a switch happens only when Filipe decides it ("Model policy" in `workflow.md`). For Hi, the plan names the hard rules at stake and the tests written first; for Lg, the plan says whether to split it.
 - If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
@@ -48,7 +48,7 @@ Read the issue, the acceptance, the rating, the project status (`PROJECT_STATUS.
 
 When the roadmap has no rating, the plan gives one, and `finish` records it with `--risk` and `--size`. A rating raised along the way also gets `--rating-note "<why>"`.
 
-Above Sm + Lo in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above Sm + Lo, this plan is what goes for approval: end the turn here. When Filipe replies, add `- plan approved: …` or `- plan rejected: …` to the PR text. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
+When the plan stops in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. When the plan stops, it is what goes for approval: end the turn here. When Filipe replies, add `- plan approved: …` or `- plan rejected: …` to the PR text. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
 
 ## 2. Implement
 

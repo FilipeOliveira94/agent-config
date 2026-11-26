@@ -445,6 +445,12 @@ def add_event(con, cid: int, kind: str, ts: str | None = None, reason: str | Non
 
 GITHUB_REMOTE = re.compile(r"github\.com[:/]+([\w.-]+)/([\w.-]+?)(?:\.git)?/*$", re.I)
 PROFILE_RE = re.compile(r"\*\*Profile:\*\*\s*`?(reviewed|solo)\b", re.I)
+# "- **Plan stops:** Hi risk or Lg size" (a note may follow the name: "**Plan stops (exception, 2026-11-26):**").
+# Only the text before the first ";" and before a negation ("Hi risk, not Med risk") counts, and only
+# ratings named with their axis: "Med risk", "Lg size".
+PLAN_STOPS_RE = re.compile(r"^\s*[-*]\s*\*\*Plan stops\b[^*\n]*\*\*:?[ \t]*([^;\n]*)", re.I | re.M)
+PLAN_STOP_NEGATION = re.compile(r"\b(?:not|except|unless)\b", re.I)
+PLAN_STOP_RATING = re.compile(r"`?\b(Lo|Med|Hi|Sm|Md|Lg)`?\s+(risk|size)\b", re.I)
 
 
 def git(cwd, *args) -> str | None:
@@ -481,6 +487,32 @@ def read_profile(top) -> str | None:
             if m:
                 return m.group(1).lower()
     return None
+
+
+def read_plan_stops(top) -> tuple[set[str], set[str]] | None:
+    """The risks and sizes whose plan stops for Filipe, from the "Plan stops" line of the project's
+    Agent workflow block; None when there is no such line or it names no rating (workflow.md's default)."""
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        path = Path(top) / name
+        if path.is_file():
+            m = PLAN_STOPS_RE.search(path.read_text(encoding="utf-8", errors="replace"))
+            if m:
+                risks, sizes = set(), set()
+                for word, axis in PLAN_STOP_RATING.findall(PLAN_STOP_NEGATION.split(m.group(1), 1)[0]):
+                    word = word.capitalize()
+                    if axis.lower() == "risk" and word in RISKS:
+                        risks.add(word)
+                    elif axis.lower() == "size" and word in SIZES:
+                        sizes.add(word)
+                return (risks, sizes) if risks or sizes else None
+    return None
+
+
+def plan_stops(risk: str, size: str, rule: tuple[set[str], set[str]] | None) -> bool:
+    """Whether a change with this expected rating stopped for Filipe's plan approval."""
+    if rule is None:  # workflow.md: everything above Sm + Lo
+        return (risk, size) != ("Lo", "Sm")
+    return risk in rule[0] or size in rule[1]
 
 
 def ensure_project(con, name: str, repo: str, path: str | None = None, profile: str | None = None) -> None:
@@ -1580,10 +1612,14 @@ def cmd_finish(args) -> None:
     if not args.no_sync:
         sync(con, [row["project"]], limit=30, roadmaps=False, report=lambda s: None)
     r = dict(con.execute("SELECT * FROM v_changes WHERE id = ?", (row["id"],)).fetchone())
-    if notes is not None and not r["plan_rounds"] and r["risk_expected"] and r["size_expected"] \
-            and (r["risk_expected"], r["size_expected"]) != ("Lo", "Sm"):
-        warn(f"rated {r['risk_expected']}/{r['size_expected']}, so the plan went to Filipe: add its "
-             f"\"- plan approved: …\" line under \"{NOTES_HEADING}\" and run finish again")
+    if notes is not None and not r["plan_rounds"] and r["risk_expected"] and r["size_expected"]:
+        info = checkout_info(Path.cwd())
+        rule = read_plan_stops(info[2]) if info and info[0] == row["project"] else None
+        if plan_stops(r["risk_expected"], r["size_expected"], rule):
+            why = ("the project's \"Plan stops\" line" if rule else
+                   "workflow.md's default (above Sm + Lo; this checkout states no \"Plan stops\" rule)")
+            warn(f"rated {r['risk_expected']}/{r['size_expected']}, so the plan went to Filipe under {why}: "
+                 f"add its \"- plan approved: …\" line under \"{NOTES_HEADING}\" and run finish again")
     reasons = ", ".join(f"{k} {r['asks_' + k]}" for k in ASK_REASONS if r["asks_" + k])
     print(change_line(get_change(con, row["id"])))
     print(f"recorded: {plural(r['asks'], 'question')}" + (f" ({reasons})" if reasons else "")
