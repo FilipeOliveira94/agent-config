@@ -70,7 +70,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 ## Reviewers
 
 - Global reviewers live in agent-config's `claude/agents/` and are linked into `~/.claude/agents/`.
-- A project's extra reviewers are subagent files in its own `.claude/agents/`, committed with the repo. The "Agent workflow" block names each one and when it runs. A project file with the same name as a global reviewer replaces it in that project, as aconta's `code-reviewer` does.
+- A project's extra reviewers are subagent files in its own `.claude/agents/`, committed with the repo. The "Agent workflow" block names each one and when it runs. Every project uses the global `code-reviewer`; a project's own must-check items (aconta's hard-rule checklist, for example) go in `.claude/review-checklist.md`, which `code-reviewer` reports on item by item. Do not add a project copy of a global reviewer.
 - Review the finished branch, not each edit. Fix every critical issue and every NOT MET criterion, then run that reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan.
 - When `po-reviewer` returns NEEDS FILIPE, put the question in the plan or the PR. Do not decide it yourself.
 - Show `po-reviewer`'s verdict with the plan. Put each reviewer's final verdict in the PR description.

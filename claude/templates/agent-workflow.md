@@ -15,7 +15,7 @@ aconta:
 - Profile: reviewed
 - Language: English for everything; the UI is bilingual (en + pt-BR) through i18n keys
 - Hi risk here: any hard rule in §5
-- Extra reviewers: `migration-reviewer` for migrations or any new table, column or index; `privacy-auditor` for imports, llm_gateway, logging, identity, audit or admin. `code-reviewer` is the project's own, in .claude/agents/.
+- Extra reviewers: `migration-reviewer` for migrations or any new table, column or index; `privacy-auditor` for imports, llm_gateway, logging, identity, audit or admin. The global `code-reviewer` also reports on the hard-rule checklist in .claude/review-checklist.md.
 - Skip review: none
 - Model exceptions: none
 
