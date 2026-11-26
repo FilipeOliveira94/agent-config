@@ -474,6 +474,15 @@ class Flow(unittest.TestCase):
                       self.finish_warning("Hi", "Sm", aconta))
         self.assertIn("rated Lo/Lg, so the plan went", self.finish_warning("Lo", "Lg", aconta))
 
+    def test_plan_stops_ignores_ratings_after_a_negation(self):
+        for line, expected in (("Hi risk, not Med risk", ({"Hi"}, set())),
+                               ("`Lg` size or hi RISK except Md size", ({"Hi"}, {"Lg"})),
+                               ("Hi risk or Lg size but not Med risk", ({"Hi"}, {"Lg"})),
+                               ("none, except Hi risk", None)):
+            with self.subTest(line=line):
+                (self.repo / "AGENTS.md").write_text(AGENTS + f"- **Plan stops:** {line}\n")
+                self.assertEqual(cl.read_plan_stops(self.repo), expected)
+
     def test_finish_without_a_plan_stops_rule_uses_the_default(self):
         self.assertIn("rated Med/Sm, so the plan went to Filipe under workflow.md's default",
                       self.finish_warning("Med", "Sm"))

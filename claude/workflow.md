@@ -58,7 +58,7 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 
 - A change that is only docs or text skips `code-reviewer`, in every project. A project's "Skip review" line adds kinds of PR that skip all gates.
 - Profile `solo` uses the Plan and effort columns and skips the review gates.
-- A project whose plans stop on fewer ratings says so in a `**Plan stops:**` line of its "Agent workflow" block, naming each rating with its axis ("Hi risk or Lg size"); text after the first ";" is commentary. `change-ledger finish` reads that line to decide whether a "plan approved" line is due. Without the line, the Plan column above holds.
+- A project whose plans stop on fewer ratings says so in a `**Plan stops:**` line of its "Agent workflow" block, naming each rating with its axis ("Hi risk or Lg size"); text after the first ";" and anything after "not", "except" or "unless" is commentary. `po-reviewer` on the plan runs only when the plan stops; an issue that skips the stop keeps every other gate in its row, including `po-reviewer` on the finished branch. `change-ledger finish` reads that line to decide whether a "plan approved" line is due. Without the line, the Plan column above holds.
 - The thread effort is set when the thread starts (Model policy). If the dev finds itself on medium for a Hi or Lg issue, it says so at the top of the plan.
 - Approval arrives in the same thread, sometimes with adjustments. Apply them before implementing.
 
