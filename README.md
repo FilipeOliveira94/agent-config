@@ -114,7 +114,7 @@ Each project declares its workflow in the "Agent workflow" section of its `AGENT
 
 | Profile | Projects | What runs |
 | --- | --- | --- |
-| reviewed | open-data-platform, aconta, pedsletter, plantao | Opus 5.5 dev; `code-reviewer` before each code PR; `po-reviewer` on every issue rated above Sm + Lo |
+| reviewed | open-data-platform, aconta, pedsletter, plantao, agent-config | Opus 5.5 dev; `code-reviewer` before each code PR; `po-reviewer` on every issue rated above Sm + Lo |
 | solo | dra-victoria-laufer, dra-victoria-laufer-assets, filipeoliveira-hub, filipeoliveira-hub-assets | Opus 5.5 for everything, no reviewers |
 
 Extra reviewers are subagent files in the project's own `.claude/agents/`. Every project uses the global `code-reviewer`; a project's own must-check items go in `.claude/review-checklist.md`, which `code-reviewer` reports on item by item (aconta keeps its hard-rule checklist there).
