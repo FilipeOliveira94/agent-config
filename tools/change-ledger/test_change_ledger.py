@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import tempfile
 import unittest
@@ -79,6 +80,7 @@ class FakeGh:
     def __init__(self):
         self.prs = []
         self.more_files = {}  # PR number -> the files on its second page
+        self.bodies = {}  # PR number -> its description on GitHub
         self.files = {"ROADMAP.md": ROADMAP, "AGENTS.md": AGENTS}
         self.calls = []
 
@@ -105,6 +107,8 @@ class FakeGh:
                 raise cl.GhError(f"gh: Could not resolve to a PullRequest with the number of {unknown[-1]}.",
                                  json.dumps(body))
             return json.dumps(body)
+        if args[0] == "api" and "/pulls/" in args[1]:
+            return self.bodies.get(int(args[1].rsplit("/", 1)[1]), "") + "\n"
         if args[0] == "api" and "contents/" in args[-1]:
             path = args[-1].split("contents/", 1)[1]
             if path in self.files:
@@ -175,16 +179,17 @@ class Parsing(unittest.TestCase):
 
     def test_parse_notes(self):
         events, lessons, unknown = cl.parse_notes([
-            "", "Prose around the bullets is ignored.", "- None.",
-            "- Decision: email or SMS? Answer: email", "- plan rejected: split it first", "- plan approved",
-            "- code-reviewer: changes needed, x", "- po-reviewer: APPROVED", "- code-reviewer: pass",
-            "- feedback: rename it", "- lesson for AGENTS.md: write it down", "- lesson: no target", "- odd line"])
+            "", "Prose around the items is ignored.", "- None.",
+            "- Decision: email or SMS? Answer: email", "- plan rejected: split it first", "- plan: approved",
+            "- code-reviewer: changes needed, x", "1. po-reviewer: APPROVED", "* code-reviewer: pass",
+            "- feedback: rename it", "- lesson for AGENTS.md: write it down", "- lesson: no target",
+            "- checks: PASS, 21 tests", "context: no list marker", "- odd line"])
         self.assertEqual([(e["kind"], e.get("reason"), e.get("verdict"), e.get("round")) for e in events], [
             ("ask", "decision", None, None), ("plan", None, None, 1), ("rejected", None, None, None),
             ("plan", None, None, 2), ("approved", None, None, None), ("review", None, "CHANGES NEEDED", 1),
             ("review", None, "APPROVED", 1), ("review", None, "PASS", 2), ("feedback", None, None, None)])
         self.assertEqual(lessons, [("AGENTS.md", "write it down"), (None, "no target")])
-        self.assertEqual(unknown, ["odd line"])
+        self.assertEqual(unknown, ["checks: PASS, 21 tests", "context: no list marker (not a list item)", "odd line"])
 
     def test_rework_counts_author_dates_from_the_start_of_review(self):
         def after_open(pr):
@@ -432,6 +437,65 @@ class Flow(unittest.TestCase):
         self.assertIn("1 review (0 blocking)", out)
         self.assertIn("no PR on GitHub", out)
         self.assertIn("rated Med/Md, so the plan went to Filipe", err.getvalue())
+
+    def test_finish_rewrites_only_what_came_from_the_pr_text(self):
+        out = self.run_cli("start", "--title", "Small fix", "--no-sync")
+        notes = Path(re.search(r"PR text: (\S+)", out).group(1))
+        self.run_cli("log", "ask", "--reason", "access", "need the deploy token")  # a correction, not from the file
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- context: where is the config? Answer: config/app.toml\n"
+                    "- code-reviewer: PASS\n- lesson for AGENTS.md: name the config file\n")
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.run_cli("finish", "--no-sync")
+        self.assertEqual((self.row()["asks"], self.row()["asks_access"]), (2, 1))
+        earlier = ts(-10)
+        with closing(cl.connect()) as con:
+            cl._CONNECTIONS.remove(con)
+            con.execute("UPDATE events SET ts = ? WHERE source = 'pr_text'", (earlier,))
+            con.commit()
+        lesson_ids = [x["id"] for x in self.query("SELECT id FROM lessons")]
+
+        notes.write_text("## Questions and decisions\n\n", encoding="utf-8")  # emptied by mistake
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.run_cli("finish", "--no-sync")
+        self.assertIn("lists nothing now: kept the 2 events", err.getvalue())
+        self.assertEqual(self.row()["asks"], 2)
+
+        with notes.open("a", encoding="utf-8") as f:  # the same lines again, one feedback round, a reworded lesson
+            f.write("- context: where is the config? Answer: config/app.toml\n- code-reviewer: PASS\n"
+                    "- feedback: shorter name\n- lesson for AGENTS.md: name the config file in AGENTS.md\n")
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.run_cli("finish", "--no-sync")
+        r = self.row()
+        self.assertEqual((r["asks"], r["review_rounds"], r["feedback_rounds"]), (2, 1, 1))
+        times = {e["kind"]: e["ts"] for e in self.query("SELECT kind, ts FROM events WHERE source = 'pr_text'")}
+        self.assertEqual((times["ask"], times["review"]), (earlier, earlier))  # recorded lines keep their time
+        lessons = self.query("SELECT id, text FROM lessons")
+        self.assertEqual([x["text"] for x in lessons], ["name the config file in AGENTS.md"])
+        self.assertNotIn(lessons[0]["id"], lesson_ids)
+
+    def test_finish_reads_the_pr_text_from_github_when_the_file_is_gone(self):
+        out = self.run_cli("start", "--title", "Fix", "--no-sync")
+        Path(re.search(r"PR text: (\S+)", out).group(1)).unlink()  # its worktree was removed
+        self.run_cli("set", "--pr", "12")
+        self.fake.bodies[12] = "## Summary\n\nFixes it.\n\n## Questions and decisions\n\n- decision: A or B? Answer: B\n"
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.run_cli("finish", "--no-sync")
+        r = self.row()
+        self.assertEqual((r["asks_decision"], r["summary"]), (1, "Fixes it."))
+
+    def test_a_version_1_ledger_gains_the_source_columns(self):
+        path = Path(self.tmp.name) / "old.db"
+        with closing(sqlite3.connect(path)) as con:
+            con.executescript(cl.SCHEMA)
+            con.executescript("ALTER TABLE events DROP COLUMN source; ALTER TABLE lessons DROP COLUMN source; "
+                              "PRAGMA user_version = 1;")
+        with closing(cl.connect(path)) as con:
+            cl._CONNECTIONS.remove(con)
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], cl.SCHEMA_VERSION)
+            for table in ("events", "lessons"):
+                self.assertIn("source", [c[1] for c in con.execute(f"PRAGMA table_info({table})")])
 
     def test_brief_flags_idle_work(self):
         self.run_cli("start", "--title", "Forgotten work")

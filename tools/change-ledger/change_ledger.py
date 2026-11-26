@@ -34,8 +34,10 @@ from pathlib import Path
 
 # CREATE ... IF NOT EXISTS never changes a table that already exists: bumping SCHEMA_VERSION needs an
 # entry in MIGRATIONS with the statements that take version N-1 to N.
-SCHEMA_VERSION = 1
-MIGRATIONS: dict[int, tuple[str, ...]] = {}
+SCHEMA_VERSION = 2
+MIGRATIONS: dict[int, tuple[str, ...]] = {
+    2: ("ALTER TABLE events ADD COLUMN source TEXT", "ALTER TABLE lessons ADD COLUMN source TEXT"),
+}
 VIEWS_VERSION = "1"
 
 RISKS = ("Lo", "Med", "Hi")
@@ -71,12 +73,13 @@ IDLE_HOURS = 72  # a change in progress with no PR and no update for this long i
 # The PR text's "Questions and decisions" section: one bullet per event, written when it happens.
 NOTES_HEADING = "Questions and decisions"
 NOTE_ASK = re.compile(r"^(decision|context|access|correction|blocked)\s*:\s*(.+)$", re.I)
-NOTE_PLAN = re.compile(r"^plan\s+(approved|rejected)\b[\s:,.-]*(.*)$", re.I)
+NOTE_PLAN = re.compile(r"^plan\s*:?\s*(approved|rejected)\b[\s:,.-]*(.*)$", re.I)
 NOTE_FEEDBACK = re.compile(r"^feedback\s*:\s*(.+)$", re.I)
 NOTE_LESSON = re.compile(r"^lesson(?:\s+for\s+([^:]+?))?\s*:\s*(.+)$", re.I)
-NOTE_REVIEW = re.compile(r"^([a-z][\w.-]*)\s*:\s*(PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT)\b"
-                         r"[\s,.:;-]*(.*)$", re.I)
-NOTE_KINDS = ("ask", "answer", "plan", "approved", "rejected", "review", "feedback")  # what finish rewrites
+# reviewers are subagents with hyphenated names (code-reviewer, privacy-auditor), so "checks: PASS" is not one
+NOTE_REVIEW = re.compile(r"^([a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+)\s*:\s*"
+                         r"(PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT)\b[\s,.:;-]*(.*)$", re.I)
+NOTE_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")  # a bullet or a numbered item
 
 
 # ---------------------------------------------------------------- basics
@@ -250,7 +253,8 @@ CREATE TABLE IF NOT EXISTS events (
   actor     TEXT,            -- dev, filipe, a reviewer's name, github
   verdict   TEXT,            -- review or checks verdict, CI state
   round     INTEGER,         -- plan round, or round per reviewer
-  note      TEXT
+  note      TEXT,
+  source    TEXT             -- 'pr_text' when finish read it from the PR text; finish rewrites only those
 );
 CREATE INDEX IF NOT EXISTS events_change ON events(change_id, id);
 
@@ -263,7 +267,8 @@ CREATE TABLE IF NOT EXISTS lessons (
   target     TEXT,            -- where the fix belongs: AGENTS.md, workflow.md, the issue text, a test, CI...
   state      TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','applied','dropped')),
   applied_in TEXT,            -- the PR or commit that applied it
-  updated_at TEXT
+  updated_at TEXT,
+  source     TEXT             -- 'pr_text' when finish read it from the PR text
 );
 
 CREATE TABLE IF NOT EXISTS issues (   -- mirror of the roadmap on the default branch, refreshed by sync
@@ -421,10 +426,10 @@ def update_change(con, cid: int, **fields) -> None:
 
 def add_event(con, cid: int, kind: str, ts: str | None = None, reason: str | None = None,
               actor: str | None = None, verdict: str | None = None, round: int | None = None,
-              note: str | None = None) -> None:
-    con.execute("INSERT INTO events(change_id, ts, kind, reason, actor, verdict, round, note) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (cid, ts or iso(now_utc()), kind, reason, actor, verdict, round, note))
+              note: str | None = None, source: str | None = None) -> None:
+    con.execute("INSERT INTO events(change_id, ts, kind, reason, actor, verdict, round, note, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (cid, ts or iso(now_utc()), kind, reason, actor, verdict, round, note, source))
 
 
 # ---------------------------------------------------------------- git and projects
@@ -1257,7 +1262,7 @@ def first_paragraph(lines: list[str], limit: int = 300) -> str | None:
 
 
 def parse_notes(lines: list[str]) -> tuple[list[dict], list[tuple[str | None, str]], list[str]]:
-    """Events and lessons from the bullets under "Questions and decisions", and the bullets not understood.
+    """Events and lessons from the list items under "Questions and decisions", and the lines not understood.
 
     - decision|context|access|correction|blocked: <question> Answer: <answer>
     - plan approved|rejected: <adjustments or why>
@@ -1271,8 +1276,13 @@ def parse_notes(lines: list[str]) -> tuple[list[dict], list[tuple[str | None, st
     rounds: dict[str, int] = {}
     plans = 0
     for raw in lines:
-        m = re.match(r"^\s*[-*+]\s+(.*\S)\s*$", raw)
-        if not m or re.fullmatch(r"(none|nothing|n/a)\.?", m.group(1), re.I):
+        m = NOTE_ITEM.match(raw)
+        if not m:  # prose is fine; an entry written without "- " in front would be lost, so say so
+            text = raw.strip()
+            if text and any(p.match(text) for p in (NOTE_ASK, NOTE_PLAN, NOTE_FEEDBACK, NOTE_LESSON, NOTE_REVIEW)):
+                unknown.append(f"{text} (not a list item)")
+            continue
+        if re.fullmatch(r"(none|nothing|n/a)\.?", m.group(1), re.I):
             continue
         item = m.group(1)
         if a := NOTE_ASK.match(item):
@@ -1469,6 +1479,48 @@ def cmd_set(args) -> None:
     print(change_line(get_change(con, row["id"])))
 
 
+def event_key(e) -> tuple:
+    """What makes two events the same line of the PR text."""
+    get = e.__getitem__ if isinstance(e, sqlite3.Row) else e.get
+    return tuple(get(k) for k in ("kind", "reason", "actor", "verdict", "round", "note"))
+
+
+def record_notes(con, row, notes: list[str]) -> None:
+    """Bring the events and lessons that came from the PR text in line with its section.
+
+    Only rows marked source = 'pr_text' change: what `log`, `start` and sync wrote stays. A line that was
+    already recorded keeps its time and a lesson keeps its number; an emptied section changes nothing.
+    """
+    events, lessons, unknown = parse_notes(notes)
+    for item in unknown:
+        warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle): {short(item, 90)}")
+    old = con.execute("SELECT * FROM events WHERE change_id = ? AND source = 'pr_text'", (row["id"],)).fetchall()
+    if not events and not lessons:
+        if old:
+            warn(f"\"{NOTES_HEADING}\" lists nothing now: kept the {plural(len(old), 'event')} recorded before")
+        return
+    stamps: dict[tuple, list[str]] = {}
+    for e in old:
+        stamps.setdefault(event_key(e), []).append(e["ts"])
+    now = iso(now_utc())
+    con.execute("DELETE FROM events WHERE change_id = ? AND source = 'pr_text'", (row["id"],))
+    for event in events:
+        kept = stamps.get(event_key(event))
+        ts = kept.pop(0) if kept else now
+        kind = event.pop("kind")
+        add_event(con, row["id"], kind, ts=ts, source="pr_text", **event)
+    listed = set()
+    for target, text in lessons:
+        listed.add(text)
+        if not con.execute("SELECT 1 FROM lessons WHERE change_id = ? AND text = ?", (row["id"], text)).fetchone():
+            con.execute("INSERT INTO lessons(project, change_id, ts, text, target, updated_at, source) "
+                        "VALUES (?, ?, ?, ?, ?, ?, 'pr_text')", (row["project"], row["id"], now, text, target, now))
+    for lesson in con.execute("SELECT id, text FROM lessons WHERE change_id = ? AND source = 'pr_text' "
+                              "AND state = 'open'", (row["id"],)).fetchall():
+        if lesson["text"] not in listed:  # its line was removed or reworded
+            con.execute("DELETE FROM lessons WHERE id = ?", (lesson["id"],))
+
+
 def cmd_finish(args) -> None:
     """Record what the work went through, from the PR text, then show the PR's CI and conflicts."""
     con = connect()
@@ -1476,32 +1528,28 @@ def cmd_finish(args) -> None:
     path = Path(args.body).expanduser() if args.body else notes_file(Path.cwd(), row["id"])
     if args.body and not path.is_file():
         die(f"{path}: no such file", 2)
-    text = path.read_text(encoding="utf-8", errors="replace") if path and path.is_file() else None
-    notes = md_section(text, NOTES_HEADING) if text is not None else None
+    text = origin = None
+    if path and path.is_file():
+        text, origin = path.read_text(encoding="utf-8", errors="replace"), str(path)
+    elif row["pr"]:  # the file went with its worktree, or finish runs in another checkout: read the PR itself
+        repo = con.execute("SELECT repo FROM projects WHERE name = ?", (row["project"],)).fetchone()["repo"]
+        try:
+            text, origin = gh(["api", f"repos/{repo}/pulls/{row['pr']}", "--jq", ".body"]), f"PR #{row['pr']} on GitHub"
+        except GhError as err:
+            warn(f"PR #{row['pr']}: {err}")
+    notes = md_section(text, NOTES_HEADING) if text else None
     updates, rating_changes, took_over = field_updates(con, row, args)
-    if "summary" not in updates and not row["summary"] and text is not None:
+    if "summary" not in updates and not row["summary"] and text:
         summary = first_paragraph(md_section(text, "Summary") or [])
         if summary:
             updates["summary"] = summary
     apply_updates(con, row, updates, rating_changes, took_over, args.rating_note)
     if notes is not None:
-        events, lessons, unknown = parse_notes(notes)
-        # the section is the whole record: a second finish replaces these events instead of adding to them
-        marks = ", ".join("?" * len(NOTE_KINDS))
-        con.execute(f"DELETE FROM events WHERE change_id = ? AND kind IN ({marks})", (row["id"], *NOTE_KINDS))
-        ts = iso(now_utc())
-        for event in events:
-            add_event(con, row["id"], event.pop("kind"), ts=ts, **event)
-        for target, lesson in lessons:
-            if not con.execute("SELECT 1 FROM lessons WHERE change_id = ? AND text = ?", (row["id"], lesson)).fetchone():
-                con.execute("INSERT INTO lessons(project, change_id, ts, text, target, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                            (row["project"], row["id"], ts, lesson, target, ts))
-        for item in unknown:
-            warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle): {short(item, 80)}")
-    elif path:
-        warn(f"{path} has no \"{NOTES_HEADING}\" section: no questions, plan rounds or reviews recorded")
+        record_notes(con, row, notes)
+    elif text:
+        warn(f"{origin} has no \"{NOTES_HEADING}\" section: no questions, plan rounds or reviews recorded")
     else:
-        warn("no PR text file (not inside a git checkout): pass --body <file>")
+        warn(f"no PR text: no file at {path or '(not a git checkout)'} and no PR on record yet; pass --body <file>")
     con.commit()
     if not args.no_sync:
         sync(con, [row["project"]], limit=30, roadmaps=False, report=lambda s: None)

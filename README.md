@@ -47,7 +47,7 @@ Keep the clone at `~/.agents`, on `main` or on a branch that has these files; th
 | Command | What it does |
 | --- | --- |
 | `start` | Records a change when the work begins, creates its PR text file in the checkout's git folder, and prints the brief |
-| `finish` | When the PR opens, and after each feedback round: records what the PR text lists under "Questions and decisions", the summary (the first paragraph of its Summary) and the seen rating, then prints the PR's CI and conflicts. A second run replaces what the first recorded |
+| `finish` | When the PR opens, and after each feedback round: records what the PR text lists under "Questions and decisions", the summary (the first paragraph of its Summary) and the seen rating, then prints the PR's CI and conflicts. A second run brings the record in line with the section: lines already recorded keep their time, lessons keep their number, and what `log` wrote stays. When the file is gone, it reads the PR text from GitHub |
 | `brief` | What `start` prints for the repo in the working directory: open PRs with CI, conflicts, merge order and edited files; work in progress, with changes idle for 3 days flagged; open lessons; last 30 days. Syncs that project first |
 | `set`, `log`, `lesson` | Corrections: one field, or one event. `lesson` also lists lessons and marks one applied or dropped |
 | `sync` | Reads PRs (state, lines, CI, conflicts, commits after opening, merge time) and roadmap ratings. Finds every clone under `~` owned by the `gh` user, PRs nobody logged included |
@@ -64,7 +64,7 @@ What a change records:
 | Summary | `finish`, from the first paragraph of the PR text's Summary | What changed and why, in one or two sentences |
 | Expected/Seen Risk, Expected/Seen Size | `start` and `finish`; otherwise the issue's rating from the roadmap | Same tags and `expected/seen` cells as the roadmaps |
 | Rating note | `start` and `finish` | Why a rating was set or raised |
-| Status and outcome | `start` and sync | planning → in_progress → pr_open → merged or closed. A draft PR stays in_progress until it is marked ready. Outcome: clean merge, merged after rework, open, dropped |
+| Status and outcome | `start` and sync | planning → pr_open → merged or closed. A draft PR stays in_progress until it is marked ready. Outcome: clean merge, merged after rework, open, dropped |
 | Code lines, doc lines, measured size | Sync | Lines added outside docs, lockfiles, generated files and binaries, on the Sm/Md/Lg scale, to check the seen size |
 | Commits after opening, feedback rounds | Sync; `feedback` lines in the PR text | Rework once the PR was up for review. A commit counts by its author date, so a rebase alone adds none |
 | CI, mergeable, conflicted | Sync | Red checks and conflicts on open PRs. Conflicted stays set once a sync saw a conflict |
