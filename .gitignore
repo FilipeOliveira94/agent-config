@@ -11,3 +11,6 @@
 *.avif
 *.heic
 *.heif
+
+# Python bytecode from running the tools and their tests
+__pycache__/
