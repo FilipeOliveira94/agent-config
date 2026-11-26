@@ -453,6 +453,35 @@ class Flow(unittest.TestCase):
         self.assertIn("no PR on GitHub", out)
         self.assertIn("rated Med/Md, so the plan went to Filipe", err.getvalue())
 
+    def finish_warning(self, risk, size, agents=None) -> str:
+        if agents is not None:
+            (self.repo / "AGENTS.md").write_text(agents)
+        out = self.run_cli("start", "--title", f"{risk}/{size} change", "--risk", risk, "--size", size, "--new")
+        notes = Path(re.search(r"PR text: (\S+)", out).group(1))
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- code-reviewer: PASS\n")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.run_cli("finish", "--no-sync")
+        return err.getvalue()
+
+    def test_finish_follows_the_projects_plan_stops_line(self):
+        aconta = AGENTS + ("- **Plan stops (exception, 2026-11-26):** only Hi risk or Lg size stops for Filipe's plan "
+                           "approval; any other issue goes straight to the PR, above Sm + Lo or not.\n")
+        self.assertNotIn("plan went to Filipe", self.finish_warning("Med", "Sm", aconta))
+        self.assertNotIn("plan went to Filipe", self.finish_warning("Med", "Md", aconta))
+        self.assertIn("rated Hi/Sm, so the plan went to Filipe under the project's \"Plan stops\" line",
+                      self.finish_warning("Hi", "Sm", aconta))
+        self.assertIn("rated Lo/Lg, so the plan went", self.finish_warning("Lo", "Lg", aconta))
+
+    def test_finish_without_a_plan_stops_rule_uses_the_default(self):
+        self.assertIn("rated Med/Sm, so the plan went to Filipe under workflow.md",
+                      self.finish_warning("Med", "Sm"))
+        self.assertNotIn("plan went to Filipe", self.finish_warning("Lo", "Sm"))
+        default = AGENTS + "- **Plan stops:** above Sm + Lo (workflow.md default)\n"
+        self.assertIn("rated Lo/Md, so the plan went to Filipe under workflow.md",
+                      self.finish_warning("Lo", "Md", default))
+
     def test_drift_verdicts_count_as_blocking_and_unknown_words_get_the_list(self):
         out = self.run_cli("start", "--title", "Small fix")
         notes = Path(re.search(r"PR text: (\S+)", out).group(1))
