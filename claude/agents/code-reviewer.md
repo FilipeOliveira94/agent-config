@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Bug and risk review of a finished branch, for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. Run once before opening a PR with code or config changes, and again after each fix round, not after every edit. Pass the base branch (default `main`) and what the change is meant to do. A project can replace this agent with its own `.claude/agents/code-reviewer.md`.
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit, Agent

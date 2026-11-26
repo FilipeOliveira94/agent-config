@@ -1,7 +1,7 @@
 ---
 name: po-reviewer
 description: Product Owner gate for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. For every issue rated above Sm + Lo, reviews the plan before it goes to Filipe, and the finished branch against the issue's acceptance criteria before the PR. Pass the issue ID, its Size and Risk, the mode (`plan` or `acceptance`), and the plan text or the base branch. Do not use in `solo` projects.
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit, Agent

@@ -64,18 +64,25 @@ fi
 # Default model and effort, added to settings.json only where a key is missing, so a value set with
 # /model or /effort is never overwritten. Not linked: Claude Code rewrites this file.
 SETTINGS="$CLAUDE_HOME/settings.json"
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "warning: python3 not found; add the keys of claude/settings.fragment.json to $SETTINGS by hand" >&2
+  exit 0
+fi
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 python3 - "$SETTINGS" "$REPO/claude/settings.fragment.json" <<'PY'
 import copy, json, shutil, sys, time
 
 path, frag_path = sys.argv[1], sys.argv[2]
 try:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         current = json.load(f)
 except ValueError as err:
     print(f"warning: {path} is not valid JSON ({err}); settings left unchanged", file=sys.stderr)
     sys.exit(0)
-with open(frag_path) as f:
+if not isinstance(current, dict):
+    print(f"warning: {path} is not a JSON object; settings left unchanged", file=sys.stderr)
+    sys.exit(0)
+with open(frag_path, encoding="utf-8") as f:
     fragment = json.load(f)
 
 def add_missing(base, extra):
@@ -91,7 +98,7 @@ if merged == current:
     print(f"{path} already has every key of the settings fragment")
 else:
     shutil.copy2(path, f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
         f.write("\n")
     print(f"added the missing settings fragment keys to {path} (backup next to it)")

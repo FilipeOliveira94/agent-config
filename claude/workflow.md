@@ -23,7 +23,7 @@ No agent merges, deletes a branch, pushes `main` or deploys. There are no PO or 
 
 ## Size and risk
 
-Every issue carries two ratings. Size is how much work it is; Risk is how costly a mistake in it would be. They are independent: a small change can be Hi risk.
+Every issue carries two ratings. Size is how much work it is; Risk is how costly a mistake in it would be. They are independent: an Sm change can be Hi risk.
 
 | Size | Meaning |
 | --- | --- |
