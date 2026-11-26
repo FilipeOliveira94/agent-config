@@ -47,4 +47,4 @@ For each acceptance criterion, decide MET, NOT MET or UNVERIFIED and cite the ev
 - **Scope check:** what goes beyond the issue, or "none".
 - **For Filipe:** product decisions you cannot make, or "none".
 
-APPROVED only when every criterion is covered (plan) or MET (acceptance) and nothing is waiting on Filipe. Be concise. Do not rewrite the plan or the code.
+Write the status as exactly one of these four words: `change-ledger` reads them, and other words (ACCEPT, ACCEPT WITH NOTES, REJECT) are not part of this format. APPROVED only when every criterion is covered (plan) or MET (acceptance) and nothing is waiting on Filipe; non-blocking notes stay APPROVED and go under Gaps. Anything that must change before the PR is CHANGES NEEDED. Be concise. Do not rewrite the plan or the code.
