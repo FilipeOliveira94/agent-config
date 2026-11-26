@@ -191,6 +191,18 @@ class Parsing(unittest.TestCase):
         self.assertEqual(lessons, [("AGENTS.md", "write it down"), (None, "no target")])
         self.assertEqual(unknown, ["checks: PASS, 21 tests", "context: no list marker (not a list item)", "odd line"])
 
+    def test_parse_notes_reads_drift_verdicts_as_the_defined_words(self):
+        events, _, unknown = cl.parse_notes([
+            "- po-reviewer: ACCEPT WITH NOTES, DP-02 wording fixed",  # aconta #15, as po-reviewer wrote it
+            "- po-reviewer: approved with notes", "- po-reviewer: Accept, fine", "- po-reviewer: REJECTED, AC 2 not met",
+            "- po-reviewer: REJECT", "- privacy-auditor: FAIL, payload logged", "- code-reviewer: CHANGES  NEEDED, x",
+            "- po-reviewer: PASS (ACCEPT WITH NOTES), kept", "- po-reviewer: LGTM", "- po-reviewer: ACCEPTABLE"])
+        self.assertEqual([(e["verdict"], e["note"]) for e in events], [
+            ("APPROVED", "ACCEPT WITH NOTES: DP-02 wording fixed"), ("APPROVED", "APPROVED WITH NOTES"),
+            ("APPROVED", "ACCEPT: fine"), ("CHANGES NEEDED", "REJECTED: AC 2 not met"), ("CHANGES NEEDED", "REJECT"),
+            ("BLOCK", "FAIL: payload logged"), ("CHANGES NEEDED", "x"), ("PASS", "(ACCEPT WITH NOTES), kept")])
+        self.assertEqual(unknown, ["po-reviewer: LGTM", "po-reviewer: ACCEPTABLE"])
+
     def test_rework_counts_author_dates_from_the_start_of_review(self):
         def after_open(pr):
             return cl.pr_fields(cl.normalize_pr(pr))["commits_after_open"]
@@ -437,6 +449,23 @@ class Flow(unittest.TestCase):
         self.assertIn("1 review (0 blocking)", out)
         self.assertIn("no PR on GitHub", out)
         self.assertIn("rated Med/Md, so the plan went to Filipe", err.getvalue())
+
+    def test_drift_verdicts_count_as_blocking_and_unknown_words_get_the_list(self):
+        out = self.run_cli("start", "--title", "Small fix")
+        notes = Path(re.search(r"PR text: (\S+)", out).group(1))
+        with notes.open("a", encoding="utf-8") as f:
+            f.write("- po-reviewer: REJECT, AC 1 not met\n- po-reviewer: ACCEPT WITH NOTES, wording\n"
+                    "- code-reviewer: LGTM\n")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            out = self.run_cli("finish", "--no-sync")
+        self.assertIn("2 reviews (1 blocking)", out)
+        self.assertIn("a reviewer verdict is one of PASS, BLOCK, APPROVED, CHANGES NEEDED, NEEDS FILIPE, NEEDS INPUT",
+                      err.getvalue())
+        self.run_cli("log", "review", "--actor", "privacy-auditor", "--verdict", "fail", "payload logged")
+        self.assertEqual(self.row()["review_blocks"], 2)
+        self.assertEqual(self.query("SELECT verdict, note FROM events WHERE actor = 'privacy-auditor'"),
+                         [{"verdict": "BLOCK", "note": "FAIL: payload logged"}])
 
     def test_finish_rewrites_only_what_came_from_the_pr_text(self):
         out = self.run_cli("start", "--title", "Small fix", "--no-sync")

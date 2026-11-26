@@ -77,8 +77,15 @@ NOTE_PLAN = re.compile(r"^plan\s*:?\s*(approved|rejected)\b[\s:,.-]*(.*)$", re.I
 NOTE_FEEDBACK = re.compile(r"^feedback\s*:\s*(.+)$", re.I)
 NOTE_LESSON = re.compile(r"^lesson(?:\s+for\s+([^:]+?))?\s*:\s*(.+)$", re.I)
 # reviewers are subagents with hyphenated names (code-reviewer, privacy-auditor), so "checks: PASS" is not one
+# The verdict words the reviewer agent files define. BLOCK and CHANGES NEEDED count as blocking (v_changes).
+REVIEW_VERDICTS = ("PASS", "BLOCK", "APPROVED", "CHANGES NEEDED", "NEEDS FILIPE", "NEEDS INPUT")
+# Words a reviewer has used instead (aconta #15: "ACCEPT WITH NOTES"), recorded as the defined word they mean.
+REVIEW_DRIFT = {"APPROVED WITH NOTES": "APPROVED", "ACCEPT WITH NOTES": "APPROVED", "ACCEPT": "APPROVED",
+                "REJECTED": "CHANGES NEEDED", "REJECT": "CHANGES NEEDED", "FAIL": "BLOCK"}
+_VERDICT_WORDS = sorted((*REVIEW_VERDICTS, *REVIEW_DRIFT), key=len, reverse=True)  # longest first
 NOTE_REVIEW = re.compile(r"^([a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+)\s*:\s*"
-                         r"(PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT)\b[\s,.:;-]*(.*)$", re.I)
+                         r"(" + "|".join(w.replace(" ", r"\s+") for w in _VERDICT_WORDS) + r")\b[\s,.:;-]*(.*)$", re.I)
+NOTE_REVIEWER = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)+\s*:", re.I)  # a reviewer line, any word
 NOTE_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")  # a bullet or a numbered item
 
 
@@ -1261,12 +1268,21 @@ def first_paragraph(lines: list[str], limit: int = 300) -> str | None:
     return short(text, limit) if text else None
 
 
+def review_verdict(word: str, note: str | None = None) -> tuple[str, str | None]:
+    """A reviewer's verdict word as the defined word, and the note; a drift word is kept at the front of the note."""
+    word = " ".join(word.upper().split())
+    if word not in REVIEW_DRIFT:
+        return word, note
+    return REVIEW_DRIFT[word], f"{word}: {note}" if note else word
+
+
 def parse_notes(lines: list[str]) -> tuple[list[dict], list[tuple[str | None, str]], list[str]]:
     """Events and lessons from the list items under "Questions and decisions", and the lines not understood.
 
     - decision|context|access|correction|blocked: <question> Answer: <answer>
     - plan approved|rejected: <adjustments or why>
     - <reviewer>: PASS|BLOCK|APPROVED|CHANGES NEEDED|NEEDS FILIPE|NEEDS INPUT, <findings that held>
+      (ACCEPT, ACCEPT WITH NOTES, APPROVED WITH NOTES, REJECT, REJECTED and FAIL are read too, see REVIEW_DRIFT)
     - feedback: <what Filipe asked for after the PR opened>
     - lesson for <target>: <what would have prevented it>
     """
@@ -1298,8 +1314,8 @@ def parse_notes(lines: list[str]) -> tuple[list[dict], list[tuple[str | None, st
         elif r := NOTE_REVIEW.match(item):
             actor = r.group(1).lower()
             rounds[actor] = rounds.get(actor, 0) + 1
-            events.append({"kind": "review", "actor": actor, "verdict": r.group(2).upper(),
-                           "round": rounds[actor], "note": r.group(3).strip() or None})
+            verdict, note = review_verdict(r.group(2), r.group(3).strip() or None)
+            events.append({"kind": "review", "actor": actor, "verdict": verdict, "round": rounds[actor], "note": note})
         else:
             unknown.append(item)
     return events, lessons, unknown
@@ -1493,7 +1509,8 @@ def record_notes(con, row, notes: list[str]) -> None:
     """
     events, lessons, unknown = parse_notes(notes)
     for item in unknown:
-        warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle): {short(item, 90)}")
+        hint = f"; a reviewer verdict is one of {', '.join(REVIEW_VERDICTS)}" if NOTE_REVIEWER.match(item) else ""
+        warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle{hint}): {short(item, 90)}")
     old = con.execute("SELECT * FROM events WHERE change_id = ? AND source = 'pr_text'", (row["id"],)).fetchall()
     if not events and not lessons:
         kept_lessons = con.execute("SELECT COUNT(*) FROM lessons WHERE change_id = ? AND source = 'pr_text'",
@@ -1589,8 +1606,11 @@ def cmd_log(args) -> None:
     con = connect()
     row = resolve_change(con, args)
     verdict = args.verdict.upper() if args.verdict else None
+    note = args.note
     if kind == "checks":
         verdict = verdict.lower()
+    elif kind == "review":
+        verdict, note = review_verdict(verdict, note)
     round_no = None
     if kind == "plan":
         round_no = con.execute("SELECT COUNT(*) FROM events WHERE change_id = ? AND kind = 'plan'",
@@ -1600,7 +1620,7 @@ def cmd_log(args) -> None:
                                (row["id"], args.actor)).fetchone()[0] + 1
     actor = args.actor or ("filipe" if kind in ("approved", "rejected", "answer", "feedback") else "dev")
     add_event(con, row["id"], kind, reason=args.reason if kind == "ask" else None, actor=actor,
-              verdict=verdict, round=round_no, note=args.note)
+              verdict=verdict, round=round_no, note=note)
     if kind in STATUS_AFTER and row["status"] in ("planning", "awaiting_approval", "in_progress"):
         update_change(con, row["id"], status=STATUS_AFTER[kind])
     con.commit()
@@ -2010,7 +2030,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("note", nargs="?", help="what happened, in one line")
     p.add_argument("--reason", choices=list(ASK_REASONS), help="for ask: " + "; ".join(f"{k}: {v}" for k, v in ASK_REASONS.items()))
     p.add_argument("--actor", help="for review: the reviewer (code-reviewer, po-reviewer...)")
-    p.add_argument("--verdict", help="for review: PASS, BLOCK, APPROVED, CHANGES NEEDED, NEEDS FILIPE...; for checks: pass or fail")
+    p.add_argument("--verdict", help="for review: PASS, BLOCK, APPROVED, CHANGES NEEDED, NEEDS FILIPE or NEEDS INPUT; for checks: pass or fail")
     p.add_argument("--id", type=int)
     p.add_argument("--project")
 

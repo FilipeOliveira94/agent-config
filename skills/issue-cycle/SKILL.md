@@ -20,6 +20,8 @@ Between the two, keep the PR text in the file `start` printed. Under its "Questi
   - `blocked`: an environment failure, such as a usage limit, a broken tool or CI infrastructure.
 - His answer to a plan: `- plan approved: <his adjustments, or "as proposed">` or `- plan rejected: <why>`.
 - Each reviewer round: `- <reviewer>: <verdict>, <the findings that held>`, for example `- code-reviewer: BLOCK, no rate limit on /signup`.
+  - Copy the reviewer's verdict word; `change-ledger` reads only these. `code-reviewer`: PASS, BLOCK or NEEDS INPUT. `po-reviewer`: APPROVED, CHANGES NEEDED, NEEDS FILIPE or NEEDS INPUT. A project reviewer with no verdict list: BLOCK when it reports a critical or high-severity finding or a failed must-check item (the rule `code-reviewer` uses), PASS otherwise.
+  - BLOCK and CHANGES NEEDED count as blocking rounds. A reviewer that answers in other words, such as ACCEPT WITH NOTES or REJECT, is still read (as APPROVED or CHANGES NEEDED), but write the defined word.
 - Each change he asks for after the PR opened: `- feedback: <what he asked>`.
 - When a question, a feedback round or a second review round could have been avoided: `- lesson for <AGENTS.md, workflow.md, the issue, a test, CI>: <what would have prevented it>`.
 
