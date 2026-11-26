@@ -49,7 +49,7 @@ Keep the clone at `~/.agents`, on `main` or on a branch that has these files; th
 | `start` | Records a change when the work begins, creates its PR text file in the checkout's git folder, and prints the brief |
 | `finish` | When the PR opens, and after each feedback round: records what the PR text lists under "Questions and decisions", the summary (the first paragraph of its Summary) and the seen rating, then prints the PR's CI and conflicts. A second run brings the record in line with the section: lines already recorded keep their time, lessons keep their number, and what `log` wrote stays. When the file is gone, it reads the PR text from GitHub |
 | `brief` | What `start` prints for the repo in the working directory: open PRs with CI, conflicts, merge order and edited files; work in progress, with changes idle for 3 days flagged; open lessons; last 30 days. Syncs that project first |
-| `set`, `log`, `lesson` | Corrections: one field, or one event. `lesson` also lists lessons and marks one applied or dropped |
+| `set`, `log`, `lesson` | Corrections: one field, or one event. An event added with `log` counts on top of the PR text, so never log a line the PR text already lists. `lesson` also lists lessons and marks one applied or dropped |
 | `sync` | Reads PRs (state, lines, CI, conflicts, commits after opening, merge time) and roadmap ratings. Finds every clone under `~` owned by the `gh` user, PRs nobody logged included |
 | `list`, `show <id>` | Recent changes as a table; one change with its event history |
 | `stats` | Merge rate, clean merges, time to merge, rework, questions by reason, estimate accuracy, data gaps |

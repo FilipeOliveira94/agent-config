@@ -1496,8 +1496,11 @@ def record_notes(con, row, notes: list[str]) -> None:
         warn(f"not a known line under \"{NOTES_HEADING}\" (formats in issue-cycle): {short(item, 90)}")
     old = con.execute("SELECT * FROM events WHERE change_id = ? AND source = 'pr_text'", (row["id"],)).fetchall()
     if not events and not lessons:
-        if old:
-            warn(f"\"{NOTES_HEADING}\" lists nothing now: kept the {plural(len(old), 'event')} recorded before")
+        kept_lessons = con.execute("SELECT COUNT(*) FROM lessons WHERE change_id = ? AND source = 'pr_text'",
+                                   (row["id"],)).fetchone()[0]
+        if old or kept_lessons:
+            warn(f"\"{NOTES_HEADING}\" lists nothing now: kept the {plural(len(old), 'event')} and "
+                 f"{plural(kept_lessons, 'lesson')} recorded before")
         return
     stamps: dict[tuple, list[str]] = {}
     for e in old:
@@ -1515,6 +1518,10 @@ def record_notes(con, row, notes: list[str]) -> None:
         if not con.execute("SELECT 1 FROM lessons WHERE change_id = ? AND text = ?", (row["id"], text)).fetchone():
             con.execute("INSERT INTO lessons(project, change_id, ts, text, target, updated_at, source) "
                         "VALUES (?, ?, ?, ?, ?, ?, 'pr_text')", (row["project"], row["id"], now, text, target, now))
+        else:  # the same lesson, maybe pointed at another file
+            con.execute("UPDATE lessons SET target = ?, updated_at = ? WHERE change_id = ? AND text = ? "
+                        "AND source = 'pr_text' AND COALESCE(target, '') <> COALESCE(?, '')",
+                        (target, now, row["id"], text, target))
     for lesson in con.execute("SELECT id, text FROM lessons WHERE change_id = ? AND source = 'pr_text' "
                               "AND state = 'open'", (row["id"],)).fetchall():
         if lesson["text"] not in listed:  # its line was removed or reworded
@@ -1548,7 +1555,7 @@ def cmd_finish(args) -> None:
         record_notes(con, row, notes)
     elif text:
         warn(f"{origin} has no \"{NOTES_HEADING}\" section: no questions, plan rounds or reviews recorded")
-    else:
+    elif not row["pr"]:  # with a PR, the failed read of its description was reported above
         warn(f"no PR text: no file at {path or '(not a git checkout)'} and no PR on record yet; pass --body <file>")
     con.commit()
     if not args.no_sync:

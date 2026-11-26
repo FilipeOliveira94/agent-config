@@ -459,7 +459,7 @@ class Flow(unittest.TestCase):
         err = io.StringIO()
         with mock.patch("sys.stderr", err):
             self.run_cli("finish", "--no-sync")
-        self.assertIn("lists nothing now: kept the 2 events", err.getvalue())
+        self.assertIn("lists nothing now: kept the 2 events and 1 lesson", err.getvalue())
         self.assertEqual(self.row()["asks"], 2)
 
         with notes.open("a", encoding="utf-8") as f:  # the same lines again, one feedback round, a reworded lesson
@@ -474,6 +474,13 @@ class Flow(unittest.TestCase):
         lessons = self.query("SELECT id, text FROM lessons")
         self.assertEqual([x["text"] for x in lessons], ["name the config file in AGENTS.md"])
         self.assertNotIn(lessons[0]["id"], lesson_ids)
+
+        notes.write_text(notes.read_text(encoding="utf-8").replace("lesson for AGENTS.md", "lesson for README.md"),
+                         encoding="utf-8")  # same lesson, another file
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.run_cli("finish", "--no-sync")
+        self.assertEqual([(x["id"], x["target"]) for x in self.query("SELECT id, target FROM lessons")],
+                         [(lessons[0]["id"], "README.md")])
 
     def test_finish_reads_the_pr_text_from_github_when_the_file_is_gone(self):
         out = self.run_cli("start", "--title", "Fix", "--no-sync")
