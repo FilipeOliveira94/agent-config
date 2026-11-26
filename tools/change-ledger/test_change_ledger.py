@@ -45,11 +45,12 @@ def ts(delta_hours: float) -> str:
 
 def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits=(-3.1,), checks=(),
          mergeable="MERGEABLE", files=(("src/app.py", 120, 10), ("README.md", 30, 0)), bot=False,
-         draft=False, first_event=None, more_files=False):
+         draft=False, first_event=None, last_ready=None, more_files=False):
     """A pull request as the GraphQL query returns it. Times are hours from now. first_event is the
-    first draft event on its timeline, e.g. ("ReadyForReviewEvent", -2); more_files says GitHub has a
-    second page of files (FakeGh.more_files)."""
+    first draft event on its timeline, e.g. ("ReadyForReviewEvent", -2); last_ready is when it was last
+    marked ready; more_files says GitHub has a second page of files (FakeGh.more_files)."""
     events = [{"__typename": first_event[0], "createdAt": ts(first_event[1])}] if first_event else []
+    ready = [{"__typename": "ReadyForReviewEvent", "createdAt": ts(last_ready)}] if last_ready is not None else []
     return {
         "number": number, "title": title, "url": f"https://github.com/acme/demo/pull/{number}",
         "state": state, "isDraft": draft, "createdAt": ts(created),
@@ -63,6 +64,7 @@ def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits
                   "nodes": [{"path": p, "additions": a, "deletions": d} for p, a, d in files]},
         "commits": {"totalCount": len(commits), "nodes": [{"commit": {"authoredDate": ts(c)}} for c in commits]},
         "draftEvents": {"nodes": events},
+        "lastReady": {"nodes": ready},
         "last": {"nodes": [{"commit": {"statusCheckRollup": {"contexts": {"nodes": list(checks)}} if checks else None}}]},
     }
 
@@ -95,8 +97,14 @@ class FakeGh:
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "nodes": self.more_files[int(fields["number"])]}}}}})
             by_number = {pr["number"]: pr for pr in self.prs}  # PRs asked for by number
-            wanted = re.findall(r"p(\d+): pullRequest\(number: \d+\)", query)
-            return json.dumps({"data": {"repository": {f"p{n}": by_number.get(int(n)) for n in wanted}}})
+            wanted = [int(n) for n in re.findall(r"p(\d+): pullRequest\(number: \d+\)", query)]
+            body = {"data": {"repository": {f"p{n}": by_number.get(n) for n in wanted}}}
+            unknown = [n for n in wanted if n not in by_number]
+            if unknown:  # like GitHub: a NOT_FOUND error per unknown number, gh exits 1, the rest still printed
+                body["errors"] = [{"type": "NOT_FOUND", "path": ["repository", f"p{n}"]} for n in unknown]
+                raise cl.GhError(f"gh: Could not resolve to a PullRequest with the number of {unknown[-1]}.",
+                                 json.dumps(body))
+            return json.dumps(body)
         if args[0] == "api" and "contents/" in args[-1]:
             path = args[-1].split("contents/", 1)[1]
             if path in self.files:
@@ -320,6 +328,20 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.row()["status"], "merged")
         self.assertTrue(any("p1: pullRequest(number: 1)" in " ".join(call) for call in self.fake.calls))
 
+    def test_a_pr_number_github_does_not_have_only_warns(self):
+        self.fake.prs = [node(1, "feat: old work", "feat/old-work", created=-50)]
+        self.run_cli("sync", "--no-roadmaps")
+        self.git("checkout", "-q", "-b", "feat/typo")
+        self.run_cli("start", "--title", "Typo in the PR number")
+        self.run_cli("set", "--pr", "77")  # GitHub has no PR 77
+        self.fake.prs = [node(2, "docs: b", "docs/b", created=-1),
+                         node(1, "feat: old work", "feat/old-work", state="MERGED", created=-50, merged=-0.5)]
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.run_cli("sync", "--no-roadmaps", "--limit", "1")  # #1 and #77 are read by number
+        self.assertEqual(self.row(1)["status"], "merged")
+        self.assertIn("change #2 names PR #77, which GitHub does not have", err.getvalue())
+
     def test_a_draft_is_in_progress_until_it_is_marked_ready(self):
         self.fake.prs = [node(6, "feat: draft", "feat/draft", draft=True, created=-5, commits=(-5.1, -3.0))]
         self.run_cli("sync", "--no-roadmaps")
@@ -327,15 +349,25 @@ class Flow(unittest.TestCase):
         self.assertEqual((r["status"], r["opened_at"], r["commits_after_open"]), ("in_progress", None, 0))
         brief = self.run_cli("brief", "--no-sync")
         self.assertIn("Waiting on Filipe: nothing", brief)
-        self.assertIn("(draft PR #6)", brief)
+        self.assertIn("#1 feat: draft · draft PR #6 · edits src/app.py, README.md", brief)
         ready = node(6, "feat: draft", "feat/draft", created=-5, commits=(-5.1, -3.0, -0.5),
-                     first_event=("ReadyForReviewEvent", -2))
+                     first_event=("ReadyForReviewEvent", -2), last_ready=-2)
         self.fake.prs = [ready]
         self.run_cli("sync", "--no-roadmaps")
         r = self.row()
         self.assertEqual((r["status"], r["opened_at"], r["commits_after_open"]),
                          ("pr_open", ready["draftEvents"]["nodes"][0]["createdAt"], 1))
         self.assertEqual(self.kinds(), ["pr_opened", "ready"])
+        # back to draft, then ready again: the second event has the second time
+        self.fake.prs = [node(6, "feat: draft", "feat/draft", draft=True, created=-5,
+                              first_event=("ReadyForReviewEvent", -2), last_ready=-2)]
+        self.run_cli("sync", "--no-roadmaps")
+        self.assertEqual(self.row()["status"], "in_progress")
+        again = node(6, "feat: draft", "feat/draft", created=-5, first_event=("ReadyForReviewEvent", -2), last_ready=-0.2)
+        self.fake.prs = [again]
+        self.run_cli("sync", "--no-roadmaps")
+        ready_times = [e["ts"] for e in self.query("SELECT ts FROM events WHERE change_id = 1 AND kind = 'ready' ORDER BY id")]
+        self.assertEqual(ready_times, [ready["lastReady"]["nodes"][0]["createdAt"], again["lastReady"]["nodes"][0]["createdAt"]])
 
     def test_a_large_pr_counts_files_past_the_first_page(self):
         self.fake.prs = [node(4, "feat: big", "feat/big", more_files=True)]
@@ -355,6 +387,11 @@ class Flow(unittest.TestCase):
         rows = self.query("SELECT * FROM v_changes")
         self.assertEqual([(r["id"], r["pr"], r["status"], r["asks"]) for r in rows], [(1, 9, "pr_open", 1)])
         self.assertEqual(self.kinds(), ["start", "ask", "pr_opened", "note"])
+        # the checkout pushes to the PR's branch under another local name: found without the T3 thread
+        self.git("update-ref", "refs/remotes/origin/fix/reset-renamed", "HEAD")
+        self.git("branch", "--set-upstream-to=origin/fix/reset-renamed")
+        os.environ.pop("T3CODE_THREAD_ID")
+        self.assertIn("#1 note logged", self.run_cli("log", "note", "found by the pushed branch name"))
         second = re.match(r"#(\d+) ", self.run_cli("start", "--title", "Second try", "--new")).group(1)
         err = io.StringIO()
         with (self.assertRaises(SystemExit) as caught, redirect_stdout(io.StringIO()), mock.patch("sys.stderr", err)):

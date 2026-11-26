@@ -66,7 +66,7 @@ What a change records:
 | Code lines, doc lines, measured size | Sync | Lines added outside docs, lockfiles, generated files and binaries, on the Sm/Md/Lg scale, to check the seen size |
 | Commits after opening, feedback rounds | Sync; agent `log feedback` | Rework once the PR was up for review. A commit counts by its author date, so a rebase alone adds none |
 | CI, mergeable, conflicted | Sync | Red checks and conflicts on open PRs. Conflicted stays set once a sync saw a conflict |
-| Edited paths | Sync | `brief` shows them, so overlap with an open PR shows before planning |
+| Edited paths | Sync | `brief` shows them for open and draft PRs, so an overlap shows before planning |
 | Questions by reason | Agent `log ask` | Why work stopped for Filipe: decision, context, access, correction, blocked |
 | Plan rounds and rejections, review rounds and blocks | Agent `log` | Where rework came from before the PR |
 | Merge after, owner actions | Agent | Merge order and the step Filipe takes at merge, shown in `brief` and the report |

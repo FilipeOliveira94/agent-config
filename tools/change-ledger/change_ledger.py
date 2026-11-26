@@ -445,6 +445,12 @@ def current_branch(cwd) -> str | None:
     return None if not branch or branch in DEFAULT_BRANCHES else branch
 
 
+def pushed_branch(cwd) -> str | None:
+    """The remote branch the checkout pushes to, without the remote: feat/x for origin/feat/x."""
+    ref = git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    return ref.split("/", 1)[1] if ref and "/" in ref else None
+
+
 def read_profile(top) -> str | None:
     for name in ("AGENTS.md", "CLAUDE.md"):
         path = Path(top) / name
@@ -634,7 +640,9 @@ def hot_paths(paths_json: str | None, limit: int = 3) -> list[str]:
 # ---------------------------------------------------------------- GitHub (read-only)
 
 class GhError(Exception):
-    pass
+    def __init__(self, message: str, stdout: str = ""):
+        super().__init__(message)
+        self.stdout = stdout  # what gh printed anyway: GraphQL sends partial data along with some errors
 
 
 TRANSIENT = re.compile(r"internet connection|timed out|timeout|connection reset|HTTP 50[234]|EOF", re.I)
@@ -655,14 +663,15 @@ def gh(args: list[str], timeout: int = 120, retries: int = 1) -> str:
         if retries and TRANSIENT.search(message):
             time.sleep(2)
             return gh(args, timeout, retries - 1)
-        raise GhError(message)
+        raise GhError(message, proc.stdout or "")
     return proc.stdout
 
 
 # Only the fields the ledger uses, so a page of 50 PRs stays far below GraphQL's node limit
 # (`gh pr list --json commits` also pulls every commit's authors and hits it at 100 PRs).
 # commits(last: 100): rework commits are the newest ones. draftEvents: the first of these events tells
-# whether the PR opened as a draft (ReadyForReviewEvent first) or was converted later.
+# whether the PR opened as a draft (ReadyForReviewEvent first) or was converted later. lastReady: when
+# it was last marked ready, for the `ready` event.
 PR_FIELDS = """
 fragment pr on PullRequest {
   number title url state isDraft createdAt mergedAt closedAt headRefName
@@ -674,6 +683,9 @@ fragment pr on PullRequest {
   commits(last: 100) { totalCount nodes { commit { authoredDate } } }
   draftEvents: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT], first: 1) {
     nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ConvertToDraftEvent { createdAt } }
+  }
+  lastReady: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) {
+    nodes { ... on ReadyForReviewEvent { createdAt } }
   }
   last: commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 50) { nodes {
     __typename
@@ -716,9 +728,9 @@ def normalize_pr(node: dict) -> dict:
     more_files = files.get("pageInfo") or {}
     commits = node.get("commits") or {}
     first_event = ((node.get("draftEvents") or {}).get("nodes") or [None])[0] or {}
-    ready_at = first_event.get("createdAt") if first_event.get("__typename") == "ReadyForReviewEvent" else None
-    if ready_at:
-        review_since = ready_at  # opened as a draft: review starts when it was marked ready
+    last_ready = ((node.get("lastReady") or {}).get("nodes") or [None])[0] or {}
+    if first_event.get("__typename") == "ReadyForReviewEvent":
+        review_since = first_event.get("createdAt")  # opened as a draft: review starts when it was marked ready
     elif node.get("isDraft") and not first_event:
         review_since = None  # a draft that was never ready for review
     else:
@@ -726,7 +738,7 @@ def normalize_pr(node: dict) -> dict:
     return {
         "number": node["number"], "title": node.get("title"), "url": node.get("url"),
         "state": node.get("state"), "isDraft": node.get("isDraft"), "createdAt": node.get("createdAt"),
-        "readyAt": ready_at, "reviewSince": review_since,
+        "reviewSince": review_since, "lastReadyAt": last_ready.get("createdAt"),
         "mergedAt": node.get("mergedAt"), "closedAt": node.get("closedAt"),
         "headRefName": node.get("headRefName"), "additions": node.get("additions"),
         "deletions": node.get("deletions"), "changedFiles": node.get("changedFiles"),
@@ -768,17 +780,31 @@ def fetch_prs(repo: str, limit: int) -> list[dict]:
     return complete_files(repo, prs)
 
 
-def fetch_prs_by_number(repo: str, numbers: list[int]) -> list[dict]:
-    """Given PRs of owner/name, 25 per query."""
+def fetch_prs_by_number(repo: str, numbers: list[int]) -> tuple[list[dict], list[int]]:
+    """Given PRs of owner/name, 25 per query, and the numbers GitHub does not have."""
     owner, name = repo.split("/", 1)
     prs: list[dict] = []
+    missing: list[int] = []
     for i in range(0, len(numbers), 25):
         fields = " ".join(f"p{int(n)}: pullRequest(number: {int(n)}) {{ ...pr }}" for n in numbers[i:i + 25])
         query = ("query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { "
                  + fields + " } }" + PR_FIELDS)
-        repository = graphql(query, owner=owner, name=name).get("repository") or {}
+        try:
+            data = graphql(query, owner=owner, name=name)
+        except GhError as err:
+            # An unknown number gets a NOT_FOUND error and a null alias; gh exits 1 but still prints
+            # the other PRs. Any other error stops the sync of this project.
+            try:
+                body = json.loads(err.stdout or "{}")
+            except ValueError:
+                raise err from None
+            if not body.get("errors") or any(e.get("type") != "NOT_FOUND" for e in body["errors"]):
+                raise err from None
+            data = body.get("data") or {}
+        repository = data.get("repository") or {}
         prs += [normalize_pr(n) for n in repository.values() if n]
-    return complete_files(repo, prs)
+        missing += [int(alias[1:]) for alias, n in repository.items() if n is None]
+    return complete_files(repo, prs), missing
 
 
 def complete_files(repo: str, prs: list[dict]) -> list[dict]:
@@ -1005,8 +1031,8 @@ def upsert_pr(con, project, pr: dict) -> tuple[int, int]:
     if row["pr"] is None:
         events.append({"kind": "pr_opened", "ts": f["created"], "actor": "github",
                        "note": f"PR #{f['pr']}" + (" as a draft" if f["draft"] else "")})
-    elif status == "pr_open" and row["status"] == "in_progress" and pr.get("readyAt"):
-        events.append({"kind": "ready", "ts": pr["readyAt"], "actor": "github", "note": "marked ready for review"})
+    elif status == "pr_open" and row["status"] == "in_progress" and pr.get("lastReadyAt"):
+        events.append({"kind": "ready", "ts": pr["lastReadyAt"], "actor": "github", "note": "marked ready for review"})
     if status == "merged" and row["status"] != "merged":
         events.append({"kind": "merged", "ts": f["merged_at"], "actor": "github"})
     if status == "closed" and row["status"] not in ("closed", "abandoned"):
@@ -1055,15 +1081,19 @@ def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool =
         seen = {pr["number"] for pr in prs}
         # A PR still open in the ledger but older than the window (many newer PRs since) is read by
         # number; otherwise it would stay open here after GitHub merged or closed it.
-        behind = sorted(r["pr"] for r in con.execute(
-            "SELECT pr FROM changes WHERE project = ? AND pr IS NOT NULL "
-            "AND status NOT IN ('merged', 'closed', 'abandoned')", (project["name"],)) if r["pr"] not in seen)
+        behind = {r["pr"]: r["id"] for r in con.execute(
+            "SELECT id, pr FROM changes WHERE project = ? AND pr IS NOT NULL "
+            "AND status NOT IN ('merged', 'closed', 'abandoned')", (project["name"],)) if r["pr"] not in seen}
         if behind:
             try:
-                prs += fetch_prs_by_number(project["repo"], behind)
+                older, missing = fetch_prs_by_number(project["repo"], sorted(behind))
+                prs += older
             except GhError as err:
-                warn(f"{project['name']}: PRs {', '.join(f'#{n}' for n in behind)}: {err}")
-                ok = False
+                warn(f"{project['name']}: PRs {', '.join(f'#{n}' for n in sorted(behind))}: {err}")
+                ok, missing = False, []
+            for n in missing:
+                warn(f"{project['name']}: change #{behind[n]} names PR #{n}, which GitHub does not have; "
+                     f"correct it with `change-ledger set --id {behind[n]} --pr <number>`")
         found = agents = None
         if roadmaps:  # the default branch is the truth: local checkouts often sit on old branches
             try:
@@ -1183,14 +1213,18 @@ def fmt_num(value: float | None, digits: int = 1) -> str:
 def find_current(con, project, info):
     """(open change on this branch, else open change of this T3 thread, or None; current branch)."""
     branch = current_branch(info[2]) if info else None
+    # a PR records the branch name on GitHub, which differs when the branch was pushed under another name
+    names = [n for n in dict.fromkeys((branch, pushed_branch(info[2]) if branch else None)) if n]
     thread = os.environ.get("T3CODE_THREAD_ID")
     base = "SELECT * FROM changes WHERE project = ? AND status NOT IN ('merged', 'closed', 'abandoned')"
     row = None
-    if branch:
-        row = con.execute(base + " AND branch = ? ORDER BY id DESC LIMIT 1", (project["name"], branch)).fetchone()
+    for name in names:
+        row = con.execute(base + " AND branch = ? ORDER BY id DESC LIMIT 1", (project["name"], name)).fetchone()
+        if row is not None:
+            break
     if row is None and thread:
         row = con.execute(base + " AND thread = ? ORDER BY id DESC LIMIT 1", (project["name"], thread)).fetchone()
-    if row is not None and branch and row["branch"] != branch and row["pr"] is None:
+    if row is not None and branch and row["branch"] not in names and row["pr"] is None:
         update_change(con, row["id"], branch=branch)  # the work moved to a new branch before its PR opened
         row = get_change(con, row["id"])
     return row, branch
@@ -1302,7 +1336,8 @@ def cmd_set(args) -> None:
             con.execute("UPDATE events SET change_id = ? WHERE change_id = ?", (row["id"], other["id"]))
             con.execute("UPDATE lessons SET change_id = ? WHERE change_id = ?", (row["id"], other["id"]))
             con.execute("DELETE FROM changes WHERE id = ?", (other["id"],))
-            updates.update({k: other[k] for k in (*SYNCED_FIELDS, "status", "conflicted")})
+            for key in (*SYNCED_FIELDS, "status", "conflicted"):
+                updates.setdefault(key, other[key])  # a field given in this same call wins
             took_over = f"took over PR #{args.pr} from change #{other['id']}, which sync had recorded"
         updates["pr"] = args.pr
     if args.status:
@@ -1460,10 +1495,16 @@ def cmd_brief(args) -> None:
         out.append("Waiting on Filipe: nothing")
     active = [r for r in rows if r["status"] in ("planning", "in_progress")]
     if active:
-        out.append("In progress: " + "; ".join(
-            f"#{r['id']}{' ' + r['issue'] if r['issue'] else ''} {short(r['title'], 40)}"
-            + (f" (draft PR #{r['pr']})" if r["pr"] else f" ({r['branch']})" if r["branch"] else "")
-            for r in active[:5]))
+        out.append("In progress:")
+        for r in active[:6]:
+            line = f"  #{r['id']}{' ' + r['issue'] if r['issue'] else ''} {short(r['title'], 50)}"
+            if r["pr"]:  # a synced PR in progress is a draft; its files can conflict like an open PR's
+                line += f" · draft PR #{r['pr']}" if r["pr_url"] else f" · PR #{r['pr']}, not synced yet"
+                paths = hot_paths(r["paths"])
+                line += f" · edits {', '.join(paths)}" if paths else ""
+            elif r["branch"]:
+                line += f" ({r['branch']})"
+            out.append(line)
     lessons = con.execute("SELECT * FROM lessons WHERE project = ? AND state = 'open' ORDER BY id DESC",
                           (name,)).fetchall()
     if lessons:
