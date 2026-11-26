@@ -1130,6 +1130,9 @@ def cmd_start(args) -> None:
     issue = (norm_issue(args.issue) or args.issue.strip()) if args.issue else None
     branch = current_branch(info[2]) if info else None
     thread = args.thread or os.environ.get("T3CODE_THREAD_ID")
+    model = args.model or os.environ.get("ANTHROPIC_MODEL")
+    effort = args.effort or os.environ.get("CLAUDE_EFFORT")
+    risk, size = validated(args.risk, RISKS, "--risk"), validated(args.size, SIZES, "--size")
     if not args.new:
         rows = con.execute("SELECT * FROM changes WHERE project = ? AND status NOT IN "
                            "('merged', 'closed', 'abandoned') ORDER BY id DESC", (project["name"],)).fetchall()
@@ -1137,18 +1140,28 @@ def cmd_start(args) -> None:
             same_work = (issue and row["issue"] == issue) or (not issue and branch and row["branch"] == branch)
             same_place = ((thread and row["thread"] == thread) or (branch and row["branch"] == branch)
                           or (issue and row["issue"] == issue and not row["thread"]))
-            if same_work and same_place:
+            if not (same_work and same_place):
+                continue
+            if row["source"] != "github":
                 print(f"already open (pass --new for a second change): {change_line(row)}")
                 return
-    risk, size = validated(args.risk, RISKS, "--risk"), validated(args.size, SIZES, "--size")
+            # sync found this PR before anyone started it: the agent takes it over
+            adopt = {"source": "agent", "thread": thread or row["thread"], "model": model or row["model"],
+                     "effort": effort or row["effort"], "exp_risk": row["exp_risk"] or risk,
+                     "exp_size": row["exp_size"] or size, "rating_note": args.rating_note or row["rating_note"],
+                     "issue": row["issue"] or issue, "kind": row["kind"] or (args.kind.lower() if args.kind else None)}
+            update_change(con, row["id"], **adopt)
+            add_event(con, row["id"], "start", actor="dev", note="took over a change that sync found first")
+            con.commit()
+            print(f"adopted: {change_line(get_change(con, row['id']))}")
+            return
     ts = iso(now_utc())
     cur = con.execute(
         "INSERT INTO changes(project, issue, title, kind, status, exp_risk, exp_size, rating_note, profile, "
         "model, effort, thread, branch, source, created_at, updated_at) "
         "VALUES (?, ?, ?, ?, 'planning', ?, ?, ?, ?, ?, ?, ?, ?, 'agent', ?, ?)",
         (project["name"], issue, args.title, args.kind.lower() if args.kind else None, risk, size,
-         args.rating_note, project["profile"], args.model or os.environ.get("ANTHROPIC_MODEL"),
-         args.effort or os.environ.get("CLAUDE_EFFORT"), thread, branch, ts, ts))
+         args.rating_note, project["profile"], model, effort, thread, branch, ts, ts))
     add_event(con, cur.lastrowid, "start", ts, actor="dev",
               note=f"expected risk {risk or '-'}, size {size or '-'}" + (f"; {args.rating_note}" if args.rating_note else ""))
     con.commit()
@@ -1294,7 +1307,7 @@ def pr_line(row: dict) -> str:
     if row["merge_after"]:
         bits.append(f"merge after {row['merge_after']}")
     if row["owner_actions"]:
-        bits.append(f"at merge: {short(row['owner_actions'], 70)}")
+        bits.append(f"at merge: {' '.join(row['owner_actions'].split())}")  # in full: it is Filipe's to-do
     paths = hot_paths(row["paths"])
     if paths:
         bits.append("edits " + ", ".join(paths))

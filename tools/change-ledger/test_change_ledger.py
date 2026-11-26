@@ -288,6 +288,19 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.row()["pr"], 8)
         self.assertEqual(len(self.query("SELECT id FROM changes")), 1)
 
+    def test_start_adopts_a_pr_that_sync_found_first(self):
+        self.git("checkout", "-q", "-b", "feat/p1-04-reset")
+        self.fake.prs = [node(7, "feat(P1-04): reset link", "feat/p1-04-reset")]
+        self.run_cli("sync", "--no-roadmaps")
+        self.assertEqual(self.row()["source"], "github")
+        out = self.run_cli("start", "--title", "Password reset", "--risk", "Lo", "--size", "Sm", "--model", "m-1")
+        self.assertIn("adopted: #1", out)
+        r = self.row()
+        self.assertEqual((r["source"], r["thread"], r["effort"], r["model"], r["exp_risk"], r["issue"]),
+                         ("agent", "thread-1", "medium", "m-1", "Lo", "P1-04"))
+        self.assertIn("already open", self.run_cli("start", "--title", "Password reset"))
+        self.assertEqual(len(self.query("SELECT id FROM changes")), 1)
+
     def test_report_escapes_the_payload(self):
         self.run_cli("start", "--title", "</script><b>x</b> & more")
         out = Path(self.tmp.name) / "report.html"
