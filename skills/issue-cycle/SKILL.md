@@ -1,45 +1,58 @@
 ---
 name: issue-cycle
-description: "Leva uma issue (ou fase) do plano até o PR aberto para o Filipe revisar e fazer o merge. Use quando citarem uma issue, um critério de aceite, uma feature a construir, ou pedirem para planejar, implementar, verificar ou abrir o PR de uma issue."
+description: "Takes an issue (or phase) from plan to an open PR for Filipe to review and merge. Use when someone cites an issue, an acceptance criterion or a feature to build, or asks to plan, implement, verify or open the PR for an issue."
 ---
 
-# Ciclo de issue
+# Issue cycle
 
-Uma issue ou fase por vez. O texto de aceite é a definição de pronto: não puxe issues futuras e não mude o aceite durante a construção. As regras gerais estão na skill `fluxo-dev`; o `AGENTS.md` do repositório prevalece no que for específico do projeto.
+One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Ciclo: plan → (tarefa grande: aprovação do plano) → implementação numa branch nova a partir da `main` atualizada → checks/testes → commit, push da branch e PR com resumo. O merge é sempre do Filipe: o agente nunca faz merge nem apaga branch.
+Cycle: rate size and risk → plan → (above Sm + Lo: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch and PR with a summary. The merge is always Filipe's: the agent never merges and never deletes a branch.
 
-Vale para todos os projetos, inclusive o `open-data-platform`.
+## Size and risk
 
-## Modo: pequena ou grande
+Every issue carries a Size (Sm, Md, Lg) and a Risk (Lo, Med, Hi) on the scale in `workflow.md`. Use the expected half of the roadmap's "Expected/Seen Risk" and "Expected/Seen Size" columns; if there is none, estimate it in the plan with one line of reasoning and record the expected half in the same PR (format in `workflow.md`). The rating decides:
 
-O prompt da issue diz qual modo seguir (critério na seção "Tarefa pequena ou grande" da skill `fluxo-dev`).
+- **Sm + Lo:** plan and implement straight through to the PR.
+- **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
+- **Hi risk or Lg size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your model or effort by yourself; a switch happens only when Filipe decides it ("Model policy" in `workflow.md`). For Hi, the plan names the hard rules at stake and the tests written first; for Lg, the plan says whether to split it.
+- If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
-- **Pequena:** planeje e implemente direto até o PR.
-- **Grande:** planeje e **pare**. Apresente o plano na thread e espere a aprovação do Filipe antes de mexer em código. A aprovação chega na mesma thread, direto dele ou repassada pelo PO de Projetos ("Plano aprovado pelo Filipe: implemente."), às vezes com ajustes; incorpore os ajustes e siga para a implementação.
-- Se, ao planejar, uma tarefa marcada como pequena se mostrar maior, reclassifique para grande, diga por quê e pare para aprovação. Nunca reclassifique de grande para pequena.
+## 1. Plan
 
-## 1. Planejar
+Read the issue, the acceptance, the rating, the project status (`PROJECT_STATUS.md`/`ROADMAP.md`) and the "Agent workflow" section of `AGENTS.md`, without changing files. If the project has no such section, stop and ask Filipe to define it ("Profiles" in `workflow.md`). Define scope, out of scope, approach, risks and what a person can do once it is done.
 
-Leia a issue, o aceite e o status do projeto (`PROJECT_STATUS.md`/`ROADMAP.md`) sem alterar arquivos. Defina escopo, fora de escopo, abordagem, riscos e o que uma pessoa consegue fazer quando estiver pronto. Na tarefa grande, este plano é o que vai para aprovação: termine o turno aqui.
+Above Sm + Lo in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above Sm + Lo, this plan is what goes for approval: end the turn here. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
 
-## 2. Implementar
+## 2. Implement
 
-Atualize a `main` (`git pull`) e crie uma branch nova a partir dela.
+Update `main` (`git pull`) and create a new branch from it.
 
-Faça a menor mudança que torna o comportamento aceito verdadeiro. Não acrescente confirmação, restrição ou passo que a issue não pediu. Ao extrair lógica repetida ou escolher fronteiras entre módulos, consulte a skill `code-structure`; a arquitetura existente do projeto prevalece.
+Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `code-structure` skill; the project's existing architecture prevails.
 
-## 3. Verificar
+## 3. Verify
 
-- Rode os checks e testes do projeto. Check não executado não é aprovação; registre comando e saída.
-- Exercite cada comportamento da issue como a pessoa usuária o faria. Comportamento não exercitado não está pronto; diga qual ficou de fora e por quê.
-- Um check interno verde não basta se a pessoa vê outra superfície. Olhe essa superfície.
+- Run the project's checks and tests. A check that was not run is not a pass; record the command and the output.
+- Exercise each behavior of the issue the way the user would. A behavior that was not exercised is not done; say which one was left out and why.
+- A green internal check is not enough if the user sees another surface. Look at that surface.
 
-## 4. Entregar
+## 4. Review (profile `reviewed`)
 
-Commits convencionais, push da branch e PR com resumo:
-- o que foi feito e como cumpre o aceite;
-- checks e testes rodados, com as saídas relevantes;
-- o que segue aberto ou ficou de fora.
+With the branch ready and the checks run:
 
-Pare aí. Não faça merge, não apague a branch, não rode CD. Correções pedidas na revisão entram como novos commits na mesma branch.
+- `code-reviewer` on every code or config change, with the base branch and the goal of the change. A docs-only or text-only change skips this gate.
+- The extra reviewers that the "Agent workflow" section lists, when their trigger matches. They live in the project's `.claude/agents/`.
+- Above Sm + Lo, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
+
+Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan ("Model policy" in `workflow.md`). Profile `solo`: skip this step.
+
+## 5. Deliver
+
+Conventional commits, push of the branch and a PR with a summary:
+- what was done and how it meets the acceptance;
+- the rating (Size and Risk) and whether it changed along the way; when the PR closes the issue, fill the seen half of both columns in the roadmap;
+- checks and tests run, with the relevant output;
+- each reviewer's final verdict, or which gates were skipped and why;
+- what stays open or was left out.
+
+Stop there. Do not merge, do not delete the branch, do not run CD. Fixes requested in review go in as new commits on the same branch.
