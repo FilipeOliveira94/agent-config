@@ -387,11 +387,7 @@ class Flow(unittest.TestCase):
         rows = self.query("SELECT * FROM v_changes")
         self.assertEqual([(r["id"], r["pr"], r["status"], r["asks"]) for r in rows], [(1, 9, "pr_open", 1)])
         self.assertEqual(self.kinds(), ["start", "ask", "pr_opened", "note"])
-        # the checkout pushes to the PR's branch under another local name: found without the T3 thread
-        self.git("update-ref", "refs/remotes/origin/fix/reset-renamed", "HEAD")
-        self.git("branch", "--set-upstream-to=origin/fix/reset-renamed")
-        os.environ.pop("T3CODE_THREAD_ID")
-        self.assertIn("#1 note logged", self.run_cli("log", "note", "found by the pushed branch name"))
+        self.assertIn("#1 note logged", self.run_cli("log", "note", "found through the T3 thread"))
         second = re.match(r"#(\d+) ", self.run_cli("start", "--title", "Second try", "--new")).group(1)
         err = io.StringIO()
         with (self.assertRaises(SystemExit) as caught, redirect_stdout(io.StringIO()), mock.patch("sys.stderr", err)):

@@ -445,12 +445,6 @@ def current_branch(cwd) -> str | None:
     return None if not branch or branch in DEFAULT_BRANCHES else branch
 
 
-def pushed_branch(cwd) -> str | None:
-    """The remote branch the checkout pushes to, without the remote: feat/x for origin/feat/x."""
-    ref = git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-    return ref.split("/", 1)[1] if ref and "/" in ref else None
-
-
 def read_profile(top) -> str | None:
     for name in ("AGENTS.md", "CLAUDE.md"):
         path = Path(top) / name
@@ -630,6 +624,8 @@ def hot_paths(paths_json: str | None, limit: int = 3) -> list[str]:
         paths = json.loads(paths_json or "[]")
     except ValueError:
         return []
+    if not isinstance(paths, list):
+        return []
     hot = [p for p in paths if p.rsplit("/", 1)[-1].lower() in HOTSPOT_FILES]
     rest = [p for p in paths if p not in hot]
     picked = (hot + rest)[:limit]
@@ -798,7 +794,8 @@ def fetch_prs_by_number(repo: str, numbers: list[int]) -> tuple[list[dict], list
                 body = json.loads(err.stdout or "{}")
             except ValueError:
                 raise err from None
-            if not body.get("errors") or any(e.get("type") != "NOT_FOUND" for e in body["errors"]):
+            if (not isinstance(body, dict) or not body.get("errors")
+                    or any(e.get("type") != "NOT_FOUND" for e in body["errors"])):
                 raise err from None
             data = body.get("data") or {}
         repository = data.get("repository") or {}
@@ -1213,18 +1210,14 @@ def fmt_num(value: float | None, digits: int = 1) -> str:
 def find_current(con, project, info):
     """(open change on this branch, else open change of this T3 thread, or None; current branch)."""
     branch = current_branch(info[2]) if info else None
-    # a PR records the branch name on GitHub, which differs when the branch was pushed under another name
-    names = [n for n in dict.fromkeys((branch, pushed_branch(info[2]) if branch else None)) if n]
     thread = os.environ.get("T3CODE_THREAD_ID")
     base = "SELECT * FROM changes WHERE project = ? AND status NOT IN ('merged', 'closed', 'abandoned')"
     row = None
-    for name in names:
-        row = con.execute(base + " AND branch = ? ORDER BY id DESC LIMIT 1", (project["name"], name)).fetchone()
-        if row is not None:
-            break
+    if branch:
+        row = con.execute(base + " AND branch = ? ORDER BY id DESC LIMIT 1", (project["name"], branch)).fetchone()
     if row is None and thread:
         row = con.execute(base + " AND thread = ? ORDER BY id DESC LIMIT 1", (project["name"], thread)).fetchone()
-    if row is not None and branch and row["branch"] not in names and row["pr"] is None:
+    if row is not None and branch and row["branch"] != branch and row["pr"] is None:
         update_change(con, row["id"], branch=branch)  # the work moved to a new branch before its PR opened
         row = get_change(con, row["id"])
     return row, branch
