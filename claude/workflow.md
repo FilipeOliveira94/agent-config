@@ -67,6 +67,20 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 - **solo:** no reviewer subagents. Opus 5.5 only; Fable only when Filipe asks for it.
 - **No "Agent workflow" section** (a new project): before the first task, ask Filipe for the profile, language, Hi-risk areas, extra reviewers and any model exceptions, and propose the block from `~/.agents/claude/templates/agent-workflow.md`. Do not start the task until the block is in `AGENTS.md`.
 
+## Change ledger
+
+Every change (a PR, or work meant to become one) has a row in the change ledger: a one-line summary, its Expected/Seen Risk and Size, and what it cost before the merge. It exists to raise the share of PRs that merge without rework and to cut the stops that need Filipe. The data is a SQLite file in WSL (`~/.local/share/change-ledger/ledger.db`), outside every repo; it is never committed or uploaded. The command is `change-ledger`, run inside the repo's checkout; `change-ledger <command> --help` lists the flags. A Windows-side session runs it as `wsl.exe -d Ubuntu --exec bash -lc 'cd ~/<repo> && change-ledger …'`.
+
+- `issue-cycle` says when to write. GitHub facts (PR, lines, CI, conflicts, merge time) come from `change-ledger sync`: never type them in.
+- Log every stop for Filipe that is not the planned plan-approval gate, with its reason: `change-ledger log ask --reason <reason> "<the question>"`. Log his reply with `change-ledger log answer "<the answer, and the file that should have held it>"`.
+  - **decision:** a choice that is Filipe's (scope, product, trade-off) and the issue did not settle.
+  - **context:** information that should have been in the repo or the issue.
+  - **access:** a permission, credential, setting or tool the agent could not use.
+  - **correction:** Filipe corrected a result or a misunderstanding.
+  - **blocked:** an environment failure, such as a usage limit, a broken tool or CI infrastructure.
+- Log changes Filipe asks for after the PR opened: `change-ledger log feedback "<what>"`.
+- When a question, a feedback round or a second review round could have been avoided, record one lesson: `change-ledger lesson "<what would have prevented it>" --target <AGENTS.md, workflow.md, the issue, a test, CI>`. Applying it is a separate change that Filipe approves. Then run `change-ledger lesson --applied <N> --in <repo#PR>`.
+
 ## Reviewers
 
 - Global reviewers live in agent-config's `claude/agents/` and are linked into `~/.claude/agents/`.
