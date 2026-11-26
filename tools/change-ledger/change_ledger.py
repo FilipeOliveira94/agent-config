@@ -449,7 +449,7 @@ PROFILE_RE = re.compile(r"\*\*Profile:\*\*\s*`?(reviewed|solo)\b", re.I)
 # Only the text before the first ";" and before a negation ("Hi risk, not Med risk") counts, and only
 # ratings named with their axis: "Med risk", "Lg size".
 PLAN_STOPS_RE = re.compile(r"^\s*[-*]\s*\*\*Plan stops\b[^*\n]*\*\*:?[ \t]*([^;\n]*)", re.I | re.M)
-PLAN_STOP_NEGATION = re.compile(r"\b(?:not|except|unless|but)\b", re.I)
+PLAN_STOP_NEGATION = re.compile(r"\b(?:not|except|unless)\b", re.I)
 PLAN_STOP_RATING = re.compile(r"`?\b(Lo|Med|Hi|Sm|Md|Lg)`?\s+(risk|size)\b", re.I)
 
 

@@ -477,7 +477,7 @@ class Flow(unittest.TestCase):
     def test_plan_stops_ignores_ratings_after_a_negation(self):
         for line, expected in (("Hi risk, not Med risk", ({"Hi"}, set())),
                                ("`Lg` size or hi RISK except Md size", ({"Hi"}, {"Lg"})),
-                               ("Hi risk or Lg size but not Med risk", ({"Hi"}, {"Lg"})),
+                               ("Hi risk but also Lg size, not Med risk", ({"Hi"}, {"Lg"})),
                                ("none, except Hi risk", None)):
             with self.subTest(line=line):
                 (self.repo / "AGENTS.md").write_text(AGENTS + f"- **Plan stops:** {line}\n")

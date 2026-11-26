@@ -7,7 +7,7 @@ Language, size and risk, review gates and model policy: `~/.agents/claude/workfl
 - **Hi risk here:** what makes an issue Hi in this project, beyond the general list
 - **Extra reviewers:** (reviewed only) `<agent>` from `.claude/agents/`, when `<paths or topics>`; or "none"
 - **Skip review:** `<kinds of PR that skip all gates>`, or "none" (docs-only changes always skip `code-reviewer`)
-- **Plan stops:** above Sm + Lo (the default), or the ratings whose plan stops for approval, each named with its axis, for example "Hi risk or Lg size"; keep it on one line, and put exceptions after a ";"
+- **Plan stops:** above Sm + Lo (the default), or the ratings whose plan stops for approval, each named with its axis, for example "Hi risk or Lg size"; keep it on one line, and put exceptions after a ";" (the parser stops at "not", "except" and "unless")
 - **Model exceptions:** for example "Fable allowed for P3 parser plans", or "none"
 
 <!-- Examples

@@ -7,7 +7,7 @@ description: "Takes an issue (or phase) from plan to an open PR for Filipe to re
 
 One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Cycle: start → rate size and risk → plan → (above Sm + Lo: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's: the agent never merges and never deletes a branch.
+Cycle: start → rate size and risk → plan → (when the plan stops: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's: the agent never merges and never deletes a branch.
 
 The change ledger ("Change ledger" in `workflow.md`) is written twice, each time inside a command you are running anyway: `change-ledger start` when the work begins and `change-ledger finish` when the PR opens. Run both from the repo's checkout. They find the change from the git branch or the T3 thread; on `main` outside T3, pass `--id <change id>` from `start`.
 
