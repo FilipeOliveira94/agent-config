@@ -48,9 +48,9 @@ If docs and an older post disagree, follow the docs. Keep a source the user name
 
 Portuguese first. Plain spoken Brazilian Portuguese, the way you would explain the work to another engineer. Short sentences. One idea each. The first line is a question, a concrete scene, or the result.
 
-`a gente`, `pra`, `tá`, and `dá uma olhada` are fine when the sentence wants them. Do not force slang into every line. Stay in `você`. Do not switch to `tu` unless the user writes that way.
+Word choice follows the Portuguese section of the `plain-voice` skill: `você`, when `a gente` and `pra` fit, and the translated openings and filler words to cut. That section is the one home for those lists.
 
-Tool names land after the idea is clear, tied to what they did. Skip the status-report shape, the slogan stack, and the opening that sounds translated: "é com grande alegria", "no mundo dos dados", "vamos mergulhar", "alavancar", "jornada" as filler.
+Tool names land after the idea is clear, tied to what they did. Skip the status-report shape and the slogan stack.
 
 Read it aloud. If you would not say it to a colleague, rewrite it.
 
@@ -147,3 +147,4 @@ After render, read the PNG and fix clipped or overlapping text before showing it
 - Tool names explain a step. They are not the opening.
 - The link exists. The hashtags match this post.
 - If there is a poster, the blocks match the post, and the PNG was read back.
+- Last pass: run the `plain-voice` skill (spoken register) over each post. It changes words and rhythm, never a claim.
