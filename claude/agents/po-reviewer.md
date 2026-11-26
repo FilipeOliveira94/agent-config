@@ -1,6 +1,6 @@
 ---
 name: po-reviewer
-description: Product Owner gate for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. For every issue rated above S + Low, reviews the plan before it goes to Filipe, and the finished branch against the issue's acceptance criteria before the PR. Pass the issue ID, its Size and Risk, the mode (`plan` or `acceptance`), and the plan text or the base branch. Do not use in `solo` projects.
+description: Product Owner gate for projects whose AGENTS.md "Agent workflow" profile is `reviewed`. For every issue rated above Sm + Lo, reviews the plan before it goes to Filipe, and the finished branch against the issue's acceptance criteria before the PR. Pass the issue ID, its Size and Risk, the mode (`plan` or `acceptance`), and the plan text or the base branch. Do not use in `solo` projects.
 model: sonnet
 effort: medium
 tools: Read, Grep, Glob, Bash
@@ -31,7 +31,7 @@ Use Bash for reading only: `git diff`, `git log`, `git status`, `git show`. Neve
 2. The edge cases and user-facing states the issue implies are covered: empty, error, permission, first run, locale.
 3. Scope: steps beyond the issue (future issues, options nobody asked for, abstractions for later) are scope creep.
 4. Decisions that belong to Filipe: changed acceptance criteria, new dependencies, architecture or product direction.
-5. The rating: Size and Risk fit the plan on the scale in `~/.agents/claude/workflow.md`. Flag an issue rated too low; an L issue's plan says whether to split it.
+5. The rating: Size and Risk fit the plan on the scale in `~/.agents/claude/workflow.md`. Flag an issue rated too low; an Lg issue's plan says whether to split it.
 
 ## Acceptance mode
 

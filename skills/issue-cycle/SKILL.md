@@ -7,22 +7,22 @@ description: "Takes an issue (or phase) from plan to an open PR for Filipe to re
 
 One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Cycle: rate size and risk → plan → (above S + Low: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch and PR with a summary. The merge is always Filipe's: the agent never merges and never deletes a branch.
+Cycle: rate size and risk → plan → (above Sm + Lo: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch and PR with a summary. The merge is always Filipe's: the agent never merges and never deletes a branch.
 
 ## Size and risk
 
-Every issue carries a Size (S, M, L) and a Risk (Low, Med, High) on the scale in `workflow.md`. Use the expected half of the roadmap's "Expected/Seen Risk" and "Expected/Seen Size" columns; if there is none, estimate it in the plan with one line of reasoning and record the expected half in the same PR (format in `workflow.md`). The rating decides:
+Every issue carries a Size (Sm, Md, Lg) and a Risk (Lo, Med, Hi) on the scale in `workflow.md`. Use the expected half of the roadmap's "Expected/Seen Risk" and "Expected/Seen Size" columns; if there is none, estimate it in the plan with one line of reasoning and record the expected half in the same PR (format in `workflow.md`). The rating decides:
 
-- **S + Low:** plan and implement straight through to the PR.
+- **Sm + Lo:** plan and implement straight through to the PR.
 - **Anything else:** plan and **stop**. Present the plan in the thread and wait for Filipe's approval before touching code. Apply the adjustments that come with the approval.
-- **High risk or L size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your model or effort by yourself; a switch happens only when Filipe decides it ("Model policy" in `workflow.md`). For High, the plan names the hard rules at stake and the tests written first; for L, the plan says whether to split it.
+- **Hi risk or Lg size:** the thread runs at Opus high, set when it starts. If you find yourself on medium, say so at the top of the plan. Never switch your model or effort by yourself; a switch happens only when Filipe decides it ("Model policy" in `workflow.md`). For Hi, the plan names the hard rules at stake and the tests written first; for Lg, the plan says whether to split it.
 - If planning shows the issue is bigger or riskier, raise the rating, say why and follow the new mode. Never lower a rating without Filipe.
 
 ## 1. Plan
 
 Read the issue, the acceptance, the rating, the project status (`PROJECT_STATUS.md`/`ROADMAP.md`) and the "Agent workflow" section of `AGENTS.md`, without changing files. If the project has no such section, stop and ask Filipe to define it ("Profiles" in `workflow.md`). Define scope, out of scope, approach, risks and what a person can do once it is done.
 
-Above S + Low in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above S + Low, this plan is what goes for approval: end the turn here. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
+Above Sm + Lo in a `reviewed` project, run `po-reviewer` (mode `plan`) with the issue ID, the rating and the plan, fix what it points out and show its verdict with the plan. Above Sm + Lo, this plan is what goes for approval: end the turn here. On a thread running Fable, ask with the plan whether to implement on Fable or switch to Opus 5.5 ("Model policy" in `workflow.md`).
 
 ## 2. Implement
 
@@ -42,7 +42,7 @@ With the branch ready and the checks run:
 
 - `code-reviewer` on every code or config change, with the base branch and the goal of the change. A docs-only or text-only change skips this gate.
 - The extra reviewers that the "Agent workflow" section lists, when their trigger matches. They live in the project's `.claude/agents/`.
-- Above S + Low, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
+- Above Sm + Lo, after `code-reviewer`, `po-reviewer` (mode `acceptance`) with the issue ID, the rating, the base branch and the checks run with their output.
 
 Fix the critical findings and the NOT MET criteria and run the reviewer again. If the same finding is still open after 2 rounds, stop and report to Filipe; he decides whether to raise the effort, switch to Fable or change the plan ("Model policy" in `workflow.md`). Profile `solo`: skip this step.
 
