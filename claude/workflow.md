@@ -67,6 +67,14 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 - **solo:** no reviewer subagents. Opus 5.5 only; Fable only when Filipe asks for it.
 - **No "Agent workflow" section** (a new project): before the first task, ask Filipe for the profile, language, Hi-risk areas, extra reviewers and any model exceptions, and propose the block from `~/.agents/claude/templates/agent-workflow.md`. Do not start the task until the block is in `AGENTS.md`.
 
+## Change ledger
+
+Every change (a PR, or work meant to become one) has a row in the change ledger: a one-line summary, its Expected/Seen Risk and Size, and what it cost before the merge. It is read after the work is done, to raise the share of PRs that merge without rework and to cut the stops that need Filipe. The data is a SQLite file in WSL (`~/.local/share/change-ledger/ledger.db`), outside every repo; it is never committed or uploaded. The command is `change-ledger`, run inside the repo's checkout; `change-ledger <command> --help` lists the flags. A Windows-side session runs it as `wsl.exe -d Ubuntu --exec bash -lc 'cd ~/<repo> && change-ledger …'`.
+
+- An issue writes to it twice, as `issue-cycle` describes: `change-ledger start` when the work begins and `change-ledger finish` when the PR opens. In between, the agent lists each question to Filipe (with its reason), plan answer, review round, feedback round and lesson under "Questions and decisions" in the PR text, and `finish` records them. GitHub facts (PR, lines, CI, conflicts, merge time) come from `change-ledger sync`: never type them in.
+- Never spend a turn on a ledger command or a "Questions and decisions" line alone. Run it in the same shell command as work you are already doing, such as `gh pr create … && change-ledger finish …`, or in the same message as your next tool call. Each extra turn re-reads the whole conversation, about 125k tokens in a typical issue thread.
+- Applying a lesson is a separate change that Filipe approves. Then run `change-ledger lesson --applied <N> --in <repo#PR>`.
+
 ## Reviewers
 
 - Global reviewers live in agent-config's `claude/agents/` and are linked into `~/.claude/agents/`.

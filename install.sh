@@ -46,6 +46,15 @@ for a in "$REPO"/claude/agents/*.md; do
 done
 prune "$CLAUDE_HOME/agents"
 
+# Command-line tools
+mkdir -p "$HOME/.local/bin"
+link "$REPO/tools/change-ledger/change_ledger.py" "$HOME/.local/bin/change-ledger"
+prune "$HOME/.local/bin"
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) echo "note: ~/.local/bin is not on PATH; add it there so change-ledger runs by name" >&2 ;;
+esac
+
 # Workflow import in the user CLAUDE.md
 case "$REPO" in
   "$HOME"/*) REL="~${REPO#"$HOME"}" ;;

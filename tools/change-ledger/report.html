@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Change ledger</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f9;
+  --surface: #ffffff;
+  --ink: #191919;
+  --ink-2: #666666;
+  --grid: #e7e7e7;
+  --axis: #c2c2c2;
+  --ring: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.04);
+  --link: #1757ac;
+  --s1: #257de0;
+  --s2: #f47230;
+  --s3: #00b894;
+  --s4: #f2a600;
+  --none: #c2c2c2;
+  --good: #0aac23;
+  --warning: #fbb315;
+  --critical: #dc3c3d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0b0b0b;
+    --surface: #191919;
+    --ink: #efefef;
+    --ink-2: #9c9c9c;
+    --grid: #303030;
+    --axis: #474747;
+    --ring: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.05);
+    --link: #84b9f3;
+    --s1: #338ced;
+    --s2: #e76624;
+    --s3: #00a888;
+    --s4: #d28e05;
+    --none: #474747;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b0b0b;
+  --surface: #191919;
+  --ink: #efefef;
+  --ink-2: #9c9c9c;
+  --grid: #303030;
+  --axis: #474747;
+  --ring: rgba(255, 255, 255, 0.10);
+  --wash: rgba(255, 255, 255, 0.05);
+  --link: #84b9f3;
+  --s1: #338ced;
+  --s2: #e76624;
+  --s3: #00a888;
+  --s4: #d28e05;
+  --none: #474747;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 48px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 16px; }
+h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
+.sub, .meta { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
+.meta { margin: 0; }
+.filters {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end;
+  padding: 12px 14px; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 10px;
+}
+.filters label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.filters .grow { flex: 1 1 220px; }
+select, input[type="search"] {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 6px; padding: 6px 8px; min-width: 150px; width: 100%;
+}
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 12px 14px; }
+.tile .label { font-size: 13px; color: var(--ink-2); }
+.tile .value { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 4px; }
+.tile .note { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 14px; margin-bottom: 16px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.grid2 > .card { margin-bottom: 16px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.table-wrap { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; font-size: 12px; vertical-align: bottom; position: sticky; top: 0; background: var(--surface); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover, th.sortable:focus-visible { color: var(--ink); }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 9px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 9px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.nowrap { white-space: nowrap; }
+tbody tr:hover { background: var(--wash); }
+.title-cell { min-width: 220px; max-width: 420px; }
+.title-cell .summary { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); margin: 4px 0 10px; }
+.legend span { display: inline-flex; align-items: center; }
+.seg { display: flex; gap: 2px; height: 8px; width: 160px; margin-top: 5px; }
+.seg-part { flex-basis: 0; min-width: 4px; height: 8px; border-radius: 4px; outline-offset: 2px; }
+.bars { display: grid; gap: 2px; margin: 8px 0 12px; }
+.bar-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); align-items: center; min-height: 26px; border-radius: 4px; outline-offset: 2px; }
+.bar-row:hover, .bar-row:focus-visible { background: var(--wash); }
+.bar-label { font-size: 13px; padding-right: 8px; }
+.bar-track { display: flex; align-items: center; gap: 6px; border-left: 1px solid var(--axis); min-height: 26px; }
+.bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--s1); }
+.bar-value { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { padding: 8px 0; border-bottom: 1px solid var(--grid); display: grid; gap: 2px; }
+.list li:last-child { border-bottom: 0; }
+.list .line1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.list .line2 { color: var(--ink-2); font-size: 12px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-2); border: 1px solid var(--axis); border-radius: 4px; padding: 0 5px; line-height: 17px; }
+.st { font-weight: 700; margin-right: 3px; }
+.st-good { color: var(--good); }
+.st-warning { color: var(--warning); }
+.st-critical { color: var(--critical); }
+.empty { color: var(--ink-2); font-size: 13px; padding: 6px 0; }
+dl.defs { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); gap: 6px 16px; margin: 8px 0 0; font-size: 13px; }
+dl.defs dt { font-weight: 600; }
+dl.defs dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 560px) { dl.defs { grid-template-columns: minmax(0, 1fr); } dl.defs dd { margin-bottom: 6px; } }
+#tip {
+  position: fixed; z-index: 10; pointer-events: none; max-width: 300px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--ring); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16); padding: 8px 10px; font-size: 12px;
+}
+#tip .tip-title { font-weight: 600; margin-bottom: 2px; }
+#tip div + div { color: var(--ink-2); }
+button.more { font: inherit; font-size: 13px; color: var(--link); background: none; border: 0; padding: 8px 0 0; cursor: pointer; }
+@media (forced-colors: active) { .seg-part, .bar, .dot { forced-color-adjust: none; border: 1px solid CanvasText; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Change ledger</h1>
+    <p class="meta" id="generated"></p>
+  </header>
+
+  <section class="filters" aria-label="Filters">
+    <label>Project <select id="f-project"></select></label>
+    <label>Period
+      <select id="f-period">
+        <option value="all">All time</option>
+        <option value="30">Last 30 days</option>
+        <option value="7">Last 7 days</option>
+      </select>
+    </label>
+    <label class="grow">Search <input id="f-search" type="search" placeholder="Title, summary, issue or branch"></label>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Headline numbers"></section>
+
+  <section class="card">
+    <h2>By project</h2>
+    <p class="sub">Outcome of every change in the period. Dependabot PRs are left out of the rates</p>
+    <div class="legend" id="outcome-legend"></div>
+    <div class="table-wrap"><table id="projects"></table></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Why work stopped for you</h2>
+      <p class="sub">Stops for you outside the plan-approval gate, by reason, from each PR's "Questions and decisions"</p>
+      <div id="asks-chart"></div>
+      <div id="asks-list"></div>
+    </section>
+    <section class="card">
+      <h2>Estimates and rework</h2>
+      <p class="sub">Roadmap issues with both halves of a rating, and clean merges by measured size</p>
+      <div id="estimates"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Changes</h2>
+    <p class="sub" id="changes-count"></p>
+    <div class="table-wrap"><table id="changes"></table></div>
+    <button class="more" id="changes-more" hidden></button>
+  </section>
+
+  <section class="card">
+    <h2>Lessons</h2>
+    <p class="sub">What would have prevented a question, a rework round or a failure, and where the fix belongs</p>
+    <div id="lessons"></div>
+  </section>
+
+  <section class="card">
+    <h2>How the numbers are counted</h2>
+    <dl class="defs">
+      <dt>Clean merge</dt><dd>Merged with no commit written after the PR was up for review and no feedback round logged.</dd>
+      <dt>Merge rate</dt><dd>Merged PRs out of merged plus closed-without-merging PRs.</dd>
+      <dt>Rework commits</dt><dd>Commits written after the PR was up for review (a draft: after it was marked ready): review fixes, CI fixes, conflict merges. Counted by author date, so a rebase alone adds none.</dd>
+      <dt>Questions</dt><dd>Stops for you outside the plan-approval gate. Agents list each one, with its reason and your answer, under "Questions and decisions" in the PR text, and <code>change-ledger finish</code> records them. Per change counts only changes agents started in the ledger.</dd>
+      <dt>Expected/Seen</dt><dd>The ledger's rating for the change, else the issue's rating in the roadmap on the default branch. <code>-</code> is a half not filled yet.</dd>
+      <dt>Code lines</dt><dd>Lines added outside docs, lockfiles, generated files and binaries. Measured size: Sm up to 400, Md up to 1,000, Lg above (the scale in <code>workflow.md</code>).</dd>
+      <dt>Stale</dt><dd>A PR open for more than <span id="stale-hours"></span> hours.</dd>
+    </dl>
+  </section>
+</main>
+<div id="tip" role="tooltip" hidden></div>
+<script id="ledger-data" type="application/json">/*__LEDGER_DATA__*/</script>
+<script>
+(() => {
+  "use strict";
+  const D = JSON.parse(document.getElementById("ledger-data").textContent);
+  const $ = (sel) => document.querySelector(sel);
+  function el(tag, attrs, ...kids) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;
+      else if (k === "style") node.setAttribute("style", v);
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) {
+      if (kid === null || kid === undefined || kid === false) continue;
+      node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    }
+    return node;
+  }
+
+  const OUTCOMES = [
+    ["clean", "Clean merge", "var(--s1)"],
+    ["rework", "Merged after rework", "var(--s2)"],
+    ["open", "PR open", "var(--s3)"],
+    ["dropped", "Closed or dropped", "var(--s4)"],
+  ];
+  const OUTCOME = Object.fromEntries(OUTCOMES.map(([k, label, color]) => [k, { label, color }]));
+  OUTCOME.in_progress = { label: "In progress", color: "var(--none)" };
+  const SIZES = ["Sm", "Md", "Lg"];
+  const RISKS = ["Lo", "Med", "Hi"];
+  const NOW = Date.parse(D.generated);
+  const hoursSince = (ts) => (ts ? (NOW - Date.parse(ts)) / 36e5 : 0);
+  const fmtHours = (h) => (h === null || h === undefined ? "–" : h < 1 ? `${Math.round(h * 60)} min` : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`);
+  const fmtDate = (ts) => {
+    if (!ts) return "–";
+    const d = new Date(ts);
+    const opts = { month: "short", day: "numeric" };
+    if (d.getFullYear() !== new Date(NOW).getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString(undefined, opts);
+  };
+  const fmtWhen = (ts) => (ts ? new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "–");
+  const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "–");
+  const num = (x, d = 1) => (x === null || x === undefined ? "–" : x.toFixed(d));
+  const median = (xs) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  // ---------- tooltip (hover and keyboard focus)
+  const tip = $("#tip");
+  function showTip(node, lines) {
+    tip.replaceChildren(...lines.map((line, i) => el("div", { class: i ? null : "tip-title", text: line })));
+    tip.hidden = false;
+    const r = node.getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    const x = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8));
+    let y = r.top - h - 8;
+    if (y < 8) y = r.bottom + 8;
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
+  }
+  const hideTip = () => { tip.hidden = true; };
+  function withTip(node, lines) {
+    node.tabIndex = 0;
+    node.addEventListener("mouseenter", () => showTip(node, lines));
+    node.addEventListener("mouseleave", hideTip);
+    node.addEventListener("focus", () => showTip(node, lines));
+    node.addEventListener("blur", hideTip);
+    return node;
+  }
+  addEventListener("scroll", hideTip, { passive: true });
+
+  // ---------- filters
+  const state = { project: "", period: "all", q: "", sort: { key: "opened", dir: -1 }, showAll: false };
+  const projectSelect = $("#f-project");
+  projectSelect.append(el("option", { value: "", text: "All projects" }));
+  for (const p of D.projects) projectSelect.append(el("option", { value: p.name, text: p.name }));
+  projectSelect.addEventListener("change", () => { state.project = projectSelect.value; state.showAll = false; render(); });
+  $("#f-period").addEventListener("change", (e) => { state.period = e.target.value; state.showAll = false; render(); });
+  $("#f-search").addEventListener("input", (e) => { state.q = e.target.value.trim().toLowerCase(); state.showAll = false; render(); });
+
+  const since = () => (state.period === "all" ? null : NOW - Number(state.period) * 864e5);
+  const matches = (...values) => !state.q || values.some((v) => v && String(v).toLowerCase().includes(state.q));
+  const inProject = (name) => !state.project || name === state.project;
+  function inScope(r) {
+    if (!inProject(r.project)) return false;
+    const s = since();
+    if (s && Date.parse(r.opened_at || r.created_at) < s) return false;
+    return matches(r.title, r.summary, r.issue, r.issue_title, r.project, r.branch);
+  }
+
+  // ---------- metrics (same definitions as `change-ledger stats`)
+  function estimate(issues, field, order) {
+    const pairs = issues.filter((i) => i[`exp_${field}`] && i[`seen_${field}`])
+      .map((i) => [order.indexOf(i[`exp_${field}`]), order.indexOf(i[`seen_${field}`])]);
+    const right = pairs.filter(([e, s]) => e === s).length;
+    const under = pairs.filter(([e, s]) => s > e).length;
+    return { total: pairs.length, right, under, over: pairs.length - right - under };
+  }
+  function summarize(rows, issues) {
+    const human = rows.filter((r) => !r.bot);
+    const merged = human.filter((r) => r.status === "merged");
+    const closed = human.filter((r) => (r.status === "closed" || r.status === "abandoned") && r.pr);
+    const clean = merged.filter((r) => r.outcome === "clean");
+    const agent = human.filter((r) => r.source === "agent");
+    const asks = agent.reduce((s, r) => s + r.asks, 0);
+    const open = rows.filter((r) => r.status === "pr_open");
+    const outcomes = Object.fromEntries(OUTCOMES.map(([k]) => [k, human.filter((r) => r.outcome === k).length]));
+    const bySize = SIZES.map((size) => { const g = merged.filter((r) => r.measured_size === size); return [size, g.length, g.filter((r) => r.outcome === "clean").length]; });
+    return {
+      changes: human.length, merged: merged.length, closed: closed.length, clean: clean.length,
+      mergeRate: merged.length + closed.length ? merged.length / (merged.length + closed.length) : null,
+      cleanRate: merged.length ? clean.length / merged.length : null,
+      medianHours: median(merged.map((r) => r.hours_to_merge).filter((h) => h !== null && h !== undefined)),
+      rework: merged.length ? merged.reduce((s, r) => s + (r.commits_after_open || 0), 0) / merged.length : null,
+      agentChanges: agent.length, asks, asksPerChange: agent.length ? asks / agent.length : null,
+      open: open.length, stale: open.filter((r) => hoursSince(r.opened_at) > D.stale_hours).length,
+      sizeEst: estimate(issues, "size", SIZES), riskEst: estimate(issues, "risk", RISKS), outcomes, bySize,
+    };
+  }
+
+  // ---------- pieces
+  function outcomeCell(outcome) {
+    const o = OUTCOME[outcome] || OUTCOME.in_progress;
+    return el("span", { class: "nowrap" }, el("span", { class: "dot", style: `background:${o.color}` }), o.label);
+  }
+  function ciCell(ci) {
+    if (!ci || ci === "none") return el("span", { class: "meta" }, "–");
+    const map = { pass: ["good", "✓"], fail: ["critical", "✕"], pending: ["warning", "●"] };
+    const [tone, glyph] = map[ci] || ["warning", "?"];
+    return el("span", { class: "nowrap" }, el("span", { class: `st st-${tone}`, "aria-hidden": "true" }, glyph), ci);
+  }
+  function segmentedBar(outcomes) {
+    const total = OUTCOMES.reduce((s, [k]) => s + outcomes[k], 0);
+    const label = OUTCOMES.map(([k, name]) => `${name} ${outcomes[k]}`).join(", ");
+    const bar = el("div", { class: "seg", role: "img", "aria-label": label });
+    for (const [k, name, color] of OUTCOMES) {
+      if (!outcomes[k]) continue;
+      bar.append(withTip(el("span", { class: "seg-part", style: `flex-grow:${outcomes[k]};background:${color}`, "aria-label": `${name}: ${outcomes[k]}` }),
+        [name, `${outcomes[k]} of ${total} changes (${pct(outcomes[k], total)})`]));
+    }
+    return bar;
+  }
+
+  // ---------- sections
+  function renderKpis(s) {
+    const tiles = [
+      ["PRs merged", String(s.merged), s.mergeRate === null ? "nothing finished yet" : `merge rate ${pct(s.merged, s.merged + s.closed)}`],
+      ["Clean merges", s.cleanRate === null ? "–" : pct(s.clean, s.merged), s.merged ? `${s.clean} of ${s.merged} merged without rework` : "no merged PRs"],
+      ["Median time to merge", fmtHours(s.medianHours), "from PR opened to merged"],
+      ["Questions per change", num(s.asksPerChange), s.agentChanges ? `${s.asks} on ${s.agentChanges} agent-started changes` : "none recorded yet"],
+    ];
+    $("#kpis").replaceChildren(...tiles.map(([label, value, note]) => el("div", { class: "tile" },
+      el("div", { class: "label", text: label }), el("div", { class: "value", text: value }), el("div", { class: "note", text: note }))));
+  }
+
+  function renderProjects(rowsByProject) {
+    $("#outcome-legend").replaceChildren(...OUTCOMES.map(([, name, color]) => el("span", null, el("span", { class: "dot", style: `background:${color}` }), name)));
+    const head = el("tr", null, ...["Project", "Profile", "Outcomes", "Changes", "Merged", "Clean", "Rework", "Open", "Merge rate", "Median to merge", "Rework commits per PR", "Questions", "Stale"]
+      .map((h, i) => el("th", { class: i >= 3 ? "num" : null, scope: "col", text: h })));
+    const body = el("tbody");
+    for (const [project, s] of rowsByProject) {
+      body.append(el("tr", null,
+        el("td", { class: "nowrap" }, el("strong", { text: project })),
+        el("td", { text: (D.projects.find((p) => p.name === project) || {}).profile || "–" }),
+        el("td", null, segmentedBar(s.outcomes)),
+        el("td", { class: "num", text: s.changes }),
+        el("td", { class: "num", text: s.merged }),
+        el("td", { class: "num", text: s.outcomes.clean }),
+        el("td", { class: "num", text: s.outcomes.rework }),
+        el("td", { class: "num", text: s.open }),
+        el("td", { class: "num", text: s.mergeRate === null ? "–" : pct(s.merged, s.merged + s.closed) }),
+        el("td", { class: "num", text: fmtHours(s.medianHours) }),
+        el("td", { class: "num", text: num(s.rework) }),
+        el("td", { class: "num", text: s.asks }),
+        el("td", { class: "num", text: s.stale })));
+    }
+    if (!rowsByProject.length) body.append(el("tr", null, el("td", { colspan: 13, class: "empty", text: "No changes in this period." })));
+    $("#projects").replaceChildren(el("thead", null, head), body);
+  }
+
+  function renderAsks(asks) {
+    const counts = Object.keys(D.reasons).map((k) => [k, asks.filter((a) => a.reason === k).length]);
+    const total = counts.reduce((s, [, n]) => s + n, 0);
+    const chart = $("#asks-chart");
+    if (!total) {
+      chart.replaceChildren(el("p", { class: "empty" }, "No questions recorded yet. Agents list each stop under \"Questions and decisions\" in the PR text, and ", el("code", { text: "change-ledger finish" }), " records them."));
+    } else {
+      counts.sort((a, b) => b[1] - a[1]);
+      const max = counts[0][1];
+      chart.replaceChildren(el("div", { class: "bars", role: "list", "aria-label": "Questions by reason" }, ...counts.map(([k, n]) =>
+        withTip(el("div", { class: "bar-row", role: "listitem", "aria-label": `${k}: ${n}` },
+          el("span", { class: "bar-label", text: capital(k) }),
+          el("span", { class: "bar-track" },
+            el("span", { class: "bar", style: `width:calc((100% - 3rem) * ${max ? n / max : 0})` }),
+            el("span", { class: "bar-value", text: n }))),
+        [capital(k), `${n} of ${total} questions (${pct(n, total)})`, D.reasons[k]]))));
+    }
+    const latest = asks.slice(0, 6);
+    $("#asks-list").replaceChildren(latest.length ? el("ul", { class: "list" }, ...latest.map((a) => el("li", null,
+      el("div", { class: "line1" }, el("span", { class: "chip", text: a.reason }), el("strong", { text: a.project }), a.note || ""),
+      el("div", { class: "line2" }, el("span", { text: fmtWhen(a.ts) }),
+        el("span", { text: `#${a.change_id}${a.issue ? " " + a.issue : ""} ${a.title || ""}` }))))) : "");
+  }
+
+  function renderEstimates(s) {
+    const head = (...h) => el("thead", null, el("tr", null, ...h.map((t, i) => el("th", { class: i ? "num" : null, scope: "col", text: t }))));
+    const row = (name, e) => el("tr", null, el("td", { text: name }), el("td", { class: "num", text: e.total }),
+      el("td", { class: "num", text: e.total ? `${e.right} (${pct(e.right, e.total)})` : "–" }),
+      el("td", { class: "num", text: e.under }), el("td", { class: "num", text: e.over }));
+    const est = el("table", null, head("Rating", "Issues", "Right", "Under", "Over"),
+      el("tbody", null, row("Size", s.sizeEst), row("Risk", s.riskEst)));
+    const sizes = el("table", null, head("Measured size", "Merged", "Clean", "Clean rate"),
+      el("tbody", null, ...s.bySize.map(([size, n, c]) => el("tr", null, el("td", { text: size }),
+        el("td", { class: "num", text: n }), el("td", { class: "num", text: c }), el("td", { class: "num", text: pct(c, n) })))));
+    $("#estimates").replaceChildren(
+      el("div", { class: "table-wrap" }, est),
+      el("p", { class: "sub", style: "margin-top:12px", text: "Under: the work turned out bigger or riskier than expected. Issues have no date, so the period filter does not apply here." }),
+      el("div", { class: "table-wrap" }, sizes));
+  }
+
+  const COLUMNS = [
+    { key: "id", label: "#", num: true, sort: (r) => r.id, cell: (r) => `#${r.id}` },
+    { key: "project", label: "Project", sort: (r) => r.project, cell: (r) => r.project },
+    { key: "issue", label: "Issue", sort: (r) => r.issue || "", cell: (r) => r.issue || "–" },
+    { key: "title", label: "Change", sort: (r) => r.title.toLowerCase(), cell: (r) => {
+      const td = el("div", null, el("div", { text: r.title }));
+      if (r.summary) td.append(el("div", { class: "summary", text: r.summary }));
+      return td;
+    }, cls: "title-cell" },
+    { key: "outcome", label: "Outcome", sort: (r) => r.outcome, cell: (r) => outcomeCell(r.outcome) },
+    { key: "risk", label: "Expected/Seen Risk", sort: (r) => r.risk, cell: (r) => el("span", { class: "mono", title: r.rating_from ? `from the ${r.rating_from}` : null, text: r.risk }) },
+    { key: "size", label: "Expected/Seen Size", sort: (r) => r.size, cell: (r) => el("span", { class: "mono", title: r.rating_from ? `from the ${r.rating_from}` : null, text: r.size }) },
+    { key: "code", label: "Code lines", num: true, sort: (r) => r.code_lines ?? -1, cell: (r) => r.code_lines === null || r.code_lines === undefined ? "–" : `${r.code_lines}${r.measured_size ? " · " + r.measured_size : r.doc_lines ? " · docs" : ""}` },
+    { key: "pr", label: "PR", num: true, sort: (r) => r.pr ?? -1, cell: (r) => r.pr ? el("a", { href: r.pr_url, target: "_blank", rel: "noopener", text: `#${r.pr}` }) : "–" },
+    { key: "ci", label: "CI", sort: (r) => r.ci || "", cell: (r) => ciCell(r.ci) },
+    { key: "asks", label: "Questions", num: true, sort: (r) => r.asks, cell: (r) => r.asks },
+    { key: "rework", label: "Rework commits", num: true, sort: (r) => r.commits_after_open ?? -1, cell: (r) => r.commits_after_open ?? "–" },
+    { key: "opened", label: "Opened", num: true, sort: (r) => Date.parse(r.opened_at || r.created_at), cell: (r) => fmtDate(r.opened_at || r.created_at) },
+    { key: "merge", label: "To merge", num: true, sort: (r) => r.hours_to_merge ?? Infinity, cell: (r) => fmtHours(r.hours_to_merge) },
+  ];
+
+  function renderChanges(rows) {
+    const col = COLUMNS.find((c) => c.key === state.sort.key) || COLUMNS[0];
+    const sorted = [...rows].sort((a, b) => { const x = col.sort(a), y = col.sort(b); return (x < y ? -1 : x > y ? 1 : b.id - a.id) * state.sort.dir; });
+    const limit = state.showAll ? sorted.length : 60;
+    const head = el("tr", null, ...COLUMNS.map((c) => {
+      const sortState = c.key === state.sort.key ? (state.sort.dir > 0 ? "ascending" : "descending") : null;
+      const th = el("th", { class: `sortable${c.num ? " num" : ""}`, scope: "col", tabindex: "0", "aria-sort": sortState, text: c.label });
+      const toggle = () => { state.sort = { key: c.key, dir: c.key === state.sort.key ? -state.sort.dir : (c.num ? -1 : 1) }; renderChanges(rows); };
+      th.addEventListener("click", toggle);
+      th.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+      return th;
+    }));
+    const body = el("tbody", null, ...sorted.slice(0, limit).map((r) => el("tr", null, ...COLUMNS.map((c) =>
+      el("td", { class: [c.num ? "num" : "", c.cls || "", ["outcome", "ci", "risk", "size", "issue", "project"].includes(c.key) ? "nowrap" : ""].join(" ").trim() || null }, c.cell(r))))));
+    if (!sorted.length) body.append(el("tr", null, el("td", { colspan: COLUMNS.length, class: "empty", text: "No changes match the filters." })));
+    $("#changes").replaceChildren(el("thead", null, head), body);
+    $("#changes-count").textContent = `${rows.length} change${rows.length === 1 ? "" : "s"}${rows.length > limit ? `, the first ${limit} shown` : ""}. Click a column to sort.`;
+    const more = $("#changes-more");
+    more.hidden = sorted.length <= limit;
+    more.textContent = `Show all ${sorted.length}`;
+    more.onclick = () => { state.showAll = true; renderChanges(rows); };
+  }
+
+  function renderLessons() {
+    const lessons = D.lessons.filter((l) => inProject(l.project) && matches(l.text, l.target, l.project))
+      .sort((a, b) => (a.state === "open" ? 0 : 1) - (b.state === "open" ? 0 : 1) || b.id - a.id);
+    $("#lessons").replaceChildren(lessons.length ? el("ul", { class: "list" }, ...lessons.map((l) => el("li", null,
+      el("div", { class: "line1" }, el("span", { class: "chip", text: l.state }), el("strong", { text: l.project }), l.text),
+      el("div", { class: "line2" }, el("span", { text: `L${l.id}` }), el("span", { text: `target: ${l.target || "not set"}` }),
+        l.change_id ? el("span", { text: `change #${l.change_id}` }) : null,
+        l.applied_in ? el("span", { text: `applied in ${l.applied_in}` }) : null, el("span", { text: fmtDate(l.ts) })))))
+      : el("p", { class: "empty" }, "No lessons yet. Agents add one with ", el("code", { text: "change-ledger lesson \"…\" --target …" }), " when a question or a rework round could have been avoided."));
+  }
+
+  function render() {
+    const rows = D.changes.filter(inScope);
+    const issues = D.issues.filter((i) => inProject(i.project));
+    const s = summarize(rows, issues);
+    renderKpis(s);
+    const projects = [...new Set(rows.map((r) => r.project))].sort()
+      .map((p) => [p, summarize(rows.filter((r) => r.project === p), D.issues.filter((i) => i.project === p))]);
+    renderProjects(projects);
+    const s0 = since();
+    renderAsks(D.asks.filter((a) => inProject(a.project) && (!s0 || Date.parse(a.ts) >= s0) && matches(a.note, a.title, a.issue, a.project)));
+    renderEstimates(s);
+    renderChanges(rows);
+    renderLessons();
+  }
+
+  $("#generated").textContent = `Generated ${fmtWhen(D.generated)} from ${D.db} · ${D.changes.length} changes in ${D.projects.length} projects`;
+  $("#stale-hours").textContent = String(D.stale_hours);
+  render();
+})();
+</script>
+</body>
+</html>
