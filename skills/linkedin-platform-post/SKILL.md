@@ -46,9 +46,9 @@ If docs and an older post disagree, follow the docs. Keep a source the user name
 
 ## Voice
 
-Portuguese first. Plain spoken Brazilian Portuguese, the way you would explain the work to another engineer. Short sentences. One idea each. The first line is a question, a concrete scene, or the result.
+Portuguese first. Plain spoken Brazilian Portuguese, the way you would explain the work to another engineer: full sentences joined the way you would say them, in paragraphs of two to five sentences, telling one story. The first line is a question the reader has asked themselves, a concrete scene, or the result.
 
-Word choice follows the Portuguese section of the `plain-voice` skill: `você`, when `a gente` and `pra` fit, and the translated openings and filler words to cut. That section is the one home for those lists.
+Read Filipe's published posts in `plain-voice`'s `voice/samples.md` before drafting, and match their rhythm. Sentence shape and word choice follow `plain-voice` ("Sounding natural" and the Portuguese section). That skill is the one home for those rules.
 
 Tool names land after the idea is clear, tied to what they did. Skip the status-report shape and the slogan stack.
 

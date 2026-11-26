@@ -31,12 +31,19 @@ Do not run it on commit messages one by one, on text the user wrote and did not 
 
 Removing tells gives clean text. Natural is a different thing.
 
-- Uneven rhythm. A short line. Then a longer one that takes its time. Neither every sentence the same length nor a string of fragments.
+These come from Filipe's published posts and his notes on drafts that failed (`voice/`).
+
+- **Full sentences, joined the way people talk.** Use "e", "mas", "então", "ou seja", "porque" to connect ideas. Paragraphs run two to five sentences. A one-line paragraph is for the opening and the closing only. A chain of short, clipped sentences is the most common failure in Filipe's notes ("frases curtas e sem construção gramatical").
+- **One story per post.** Pick the thread (the problem, what changed, the result) and keep only the details that move it. A post that names every mechanism, metric and tool reads as a changelog.
+- **A short line is a beat, not the rhythm.** "Ou seja, completamente inviável." works inside a paragraph. A slide-style verdict on its own ("O custo é real.") sounds robotic.
+- **Numbers inside the story, and few of them:** "levava ~26h", "roda em 6h", "cerca de 30 DAGs". Not a run of metrics.
+- **Explain a term in plain Portuguese, acronym in parentheses:** "a captura de mudanças do banco (CDC)", "o histórico de alterações (SCD)".
+- **What is not done yet is the next step, not a disclaimer.** "Daqui pra frente entram a orquestração e o monitoramento." Never "não afirmo", "não finjo que existe", "ainda não consigo provar".
+- **Humble, and generous with credit.** No bravado or self-promotion. When the story is a colleague's, it stays theirs.
+- **Opening:** a question the reader has asked themselves ("Todo mundo já viu um número num relatório e pensou: como chegaram nisso?") or a scene ("Vi uma implementação de um colega esses dias que ficou na minha cabeça."). Not a question about the design of your own code.
+- **Closing:** an invitation ("Se tiver interesse, dá uma olhada no meu repo nos comentários!") or a light question that asks one thing in plain words ("É legal quando a gente identifica valor e entrega uma solução eficaz pro negócio, né?").
 - One concrete detail beats an adjective: the file that arrived late, the number that did not match.
 - A lesson can take a side: what you would do again, what you would skip. A build post states what changed, with no forced opinion.
-- First person is fine.
-- Leave a little mess: one aside, a question you actually had. Perfect symmetry reads as generated.
-- Do not overcorrect into a chain of tiny sentences. That is its own tell.
 
 ## Portuguese (pt-BR)
 
@@ -47,14 +54,16 @@ Cut:
 - Translated openings and filler: "é com grande alegria", "no mundo dos dados", "no cenário atual", "vamos mergulhar", "neste post", "vale ressaltar", "é importante destacar", "em suma".
 - Buzzwords as filler: "alavancar", "potencializar", "jornada", "robusto", "disruptivo", "virar a chave".
 - "Não é apenas X, é Y" and "não só X, mas também Y". Say the point.
-- Hook chains: "O resultado?", "E o melhor?", "Spoiler:".
+- Hook chains: "O resultado?", "E o melhor?", "Spoiler:". A plain "Resultado: todo mundo quer nos seus dashboards." inside the story is fine; Filipe writes it.
+- Phrases Filipe never says: "vamos pra cima", "não consigo provar o conceito", "tenho muita experiência como desenvolvedor", "ninguém pode me provar o contrário", "isso aqui pra mim é fácil", and anything in that register.
 - Gerundismo: "vou estar enviando" becomes "vou enviar".
 - Emojis as bullets (🚀, ✅, 👉) and hashtags in the middle of the text.
 
 Keep:
 
 - `você`. Do not switch to `tu` unless the user writes that way.
-- `a gente`, `pra`, `tá`, `dá uma olhada` when the sentence wants them, not in every line.
+- `a gente`, `pra`, `pro`, `tá`, `dá uma olhada` when the sentence wants them, not in every line.
+- Expressions Filipe uses: "ficou na minha cabeça", "me fez pensar", "me deixou impressionado", "criamos algo diferente, porém, efetivo", "vamos precisar ajustar isso aí", "pasmem", "Óbvio,". Use one when it fits; never stack them.
 - Punctuation the way a Brazilian writes it. A rare dash or a real parenthetical is fine in Portuguese; the dash rule below is for English.
 
 ## Patterns to remove
