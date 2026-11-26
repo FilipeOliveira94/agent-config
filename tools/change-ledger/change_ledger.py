@@ -133,6 +133,10 @@ def ratio(part: float, whole: float) -> float | None:
     return part / whole if whole else None
 
 
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 def short(text: str | None, width: int = 70) -> str:
     text = " ".join((text or "").split())
     return text if len(text) <= width else text[: width - 1].rstrip() + "…"
@@ -1403,12 +1407,12 @@ def cmd_show(args) -> None:
         ("CI", r["ci"]),
         ("Mergeable", (r["mergeable"] or "?") + (" (conflicted before)" if r["conflicted"] else "")
          if r["status"] == "pr_open" else "had conflicts" if r["conflicted"] else None),
-        ("Rework", f"{r['commits_after_open']} commits after the PR opened, {r['feedback_rounds']} feedback rounds"
-         if r["commits_after_open"] is not None else None),
+        ("Rework", f"{plural(r['commits_after_open'], 'commit')} after the PR opened, "
+                   f"{plural(r['feedback_rounds'], 'feedback round')}" if r["commits_after_open"] is not None else None),
         ("Questions", f"{r['asks']} (decision {r['asks_decision']}, context {r['asks_context']}, access {r['asks_access']}, "
                       f"correction {r['asks_correction']}, blocked {r['asks_blocked']})"),
-        ("Plan", f"{r['plan_rounds']} rounds, {r['plan_rejections']} rejected"),
-        ("Reviews", f"{r['review_rounds']} rounds, {r['review_blocks']} blocking"),
+        ("Plan", f"{plural(r['plan_rounds'], 'round')}, {r['plan_rejections']} rejected"),
+        ("Reviews", f"{plural(r['review_rounds'], 'round')}, {r['review_blocks']} blocking"),
         ("Merge after", r["merge_after"]), ("At merge", r["owner_actions"]),
         ("Dev", " · ".join(x for x in (r["model"], r["effort"] and f"effort {r['effort']}", r["thread"] and f"thread {r['thread']}") if x) or None),
         ("Opened", fmt_local(r["opened_at"])), ("Merged", fmt_local(r["merged_at"])),
