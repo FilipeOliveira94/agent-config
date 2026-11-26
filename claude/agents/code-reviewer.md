@@ -18,7 +18,7 @@ The caller passes the base branch and what the change is meant to do (the issue 
 
 1. The whole change against the base: `git diff <base>...HEAD`, plus `git diff HEAD` and `git status --porcelain` for uncommitted and untracked files. Read untracked files in full. Plain `git diff` alone misses committed, staged and new files.
 2. The project's rules: `AGENTS.md`, `CLAUDE.md` and `.claude/rules/*.md`. A broken hard rule is a critical issue.
-3. Callers and callees of changed functions when the change alters a contract.
+3. Callers and callees of changed functions when the change alters a contract. In a repo with a `.codegraph/` folder, `codegraph callers <symbol>` and `codegraph impact <symbol>` through Bash list them; otherwise use Grep.
 
 ## What to look for
 

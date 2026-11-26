@@ -98,3 +98,14 @@ Every issue carries two ratings. Size is how much work it is; Risk is how costly
 - Start one from WSL: `t3 thread start --title '<title>' --provider claudeAgent --model claude-opus-5-5 -- <project> "$(cat prompt.md)"`. Pass the prompt as an argument, not on stdin. `t3 project list` finds the project; `t3 thread show <id>` reads the result.
 - The `t3` CLI has no effort flag: a new thread takes the project's default model and effort in T3 (Opus 5.5, medium). For a Hi or Lg issue, pick high effort in the thread settings when starting it.
 - The prompt names the issue and its rating when the roadmap has one, and says to follow the repo's `AGENTS.md` and the `issue-cycle` skill.
+
+## Code index
+
+CodeGraph keeps a local graph of symbols and calls in `.codegraph/` for open-data-platform, aconta and pedsletter. The static sites (dra-victoria-laufer, filipeoliveira-hub) and the asset repos have none. Setup is in agent-config's README.
+
+- In a checkout with `.codegraph/`, ask `codegraph_explore` first about structure: where something is defined, who calls it, what a change reaches. Call it directly in the main thread; one call usually replaces an Explore subagent. Treat the source it returns as read.
+- Use Read and Grep, and the Explore subagent for a large search, for what it does not index (SQL, dbt models, YAML, Markdown, config), for log hunts, and in a checkout without `.codegraph/`, such as a T3 worktree.
+- A reply with a staleness banner names files that changed since the last sync: Read those files.
+- Subagents get no MCP tools. A reviewer runs the CLI through Bash: `codegraph callers <symbol>`, `codegraph impact <symbol>`, `codegraph explore "<question>"`.
+- Never read `.codegraph/` itself; a `permissions.deny` rule blocks it.
+- Context Mode is not installed (decision of 2026-11-25): its hooks cut tool output inside reviewer subagents, and its sandbox runs commands that `bash-policy.py` never sees. Long output still goes through `tail`, `grep` or a filter.
