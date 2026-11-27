@@ -730,7 +730,8 @@ def gh(args: list[str], timeout: int = 120, retries: int = 1) -> str:
 # it was last marked ready, for the `ready` event.
 PR_FIELDS = """
 fragment pr on PullRequest {
-  number title url state isDraft createdAt mergedAt closedAt headRefName
+  number title url state isDraft createdAt mergedAt closedAt headRefName baseRefName
+  mergeCommit { oid }
   additions deletions changedFiles mergeable
   author { __typename login }
   comments { totalCount }
@@ -796,7 +797,8 @@ def normalize_pr(node: dict) -> dict:
         "state": node.get("state"), "isDraft": node.get("isDraft"), "createdAt": node.get("createdAt"),
         "reviewSince": review_since, "lastReadyAt": last_ready.get("createdAt"),
         "mergedAt": node.get("mergedAt"), "closedAt": node.get("closedAt"),
-        "headRefName": node.get("headRefName"), "additions": node.get("additions"),
+        "headRefName": node.get("headRefName"), "baseRefName": node.get("baseRefName"),
+        "mergeCommit": (node.get("mergeCommit") or {}).get("oid"), "additions": node.get("additions"),
         "deletions": node.get("deletions"), "changedFiles": node.get("changedFiles"),
         "mergeable": node.get("mergeable"), "author": {"login": login},
         "comments_count": (node.get("comments") or {}).get("totalCount", 0),
@@ -1117,6 +1119,40 @@ def upsert_pr(con, project, pr: dict) -> tuple[int, int]:
     return int(created), int(changed and not created)
 
 
+STRANDED_DAYS = 30  # how far back the stranded-merge audit looks, so an old, settled case stops warning
+
+
+def stranded_merges(repo: str, prs: list[dict]) -> list[str]:
+    """Warnings for merged PRs whose merge commit is not on the default branch: a PR stacked on another
+    branch and merged after that branch was already merged and deleted. Read-only: it asks GitHub's
+    compare API whether each merge commit is an ancestor of the default branch. PRs merged into the
+    default branch itself, and those merged more than STRANDED_DAYS ago, are not checked."""
+    since = now_utc() - timedelta(days=STRANDED_DAYS)
+    candidates = [pr for pr in prs if pr.get("mergedAt") and pr.get("mergeCommit") and pr.get("baseRefName")
+                  and (parse_ts(pr["mergedAt"]) or since) > since]
+    if not candidates:
+        return []
+    try:
+        default = gh(["api", f"repos/{repo}", "--jq", ".default_branch"]).strip()
+    except GhError as err:
+        return [f"{repo}: cannot read the default branch for the stranded-merge check: {err}"]
+    found = []
+    for pr in candidates:
+        if pr["baseRefName"] == default:
+            continue
+        try:
+            status = gh(["api", f"repos/{repo}/compare/{default}...{pr['mergeCommit']}",
+                         "--jq", ".status"]).strip()
+        except GhError as err:
+            found.append(f"{repo}: PR #{pr['number']} merged into {pr['baseRefName']}; "
+                         f"cannot check that it reached {default}: {err}")
+            continue
+        if status not in ("behind", "identical"):  # "ahead" or "diverged": the merge commit is not on it
+            found.append(f"{repo}: PR #{pr['number']} merged into {pr['baseRefName']}, not {default}: "
+                         f"its changes are not on {default} unless a later PR brought them over")
+    return found
+
+
 def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool = True,
          report=print) -> bool:
     projects = discover(con)
@@ -1159,6 +1195,7 @@ def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool =
             except GhError as err:
                 warn(f"{project['name']} roadmap: {err}")
                 found = agents = None
+        stranded = stranded_merges(project["repo"], prs)
         created = updated = 0
         for pr in prs:
             c, u = upsert_pr(con, project, pr)
@@ -1173,6 +1210,8 @@ def sync(con, names: list[str] | None = None, limit: int = 100, roadmaps: bool =
         con.execute("UPDATE projects SET synced_at = ? WHERE name = ?", (iso(now_utc()), project["name"]))
         con.commit()
         report(f"{project['name']}: {len(prs)} PRs read, {created} new, {updated} updated{note}")
+        for line in stranded:
+            warn(line)
     return ok
 
 

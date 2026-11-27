@@ -14,12 +14,14 @@ Filipe's main development flow, in force since 2026-11-24. Every Claude Code ses
 
 | Role | Who | Does |
 | --- | --- | --- |
-| Owner | Filipe | Picks the issue, approves plans, reviews the PR, merges it and deletes the branch. Confirms any switch to Fable. |
+| Owner | Filipe | Picks the issue, approves plans, reviews the PR and merges it. GitHub then deletes the merged head branch (see below). Confirms any switch to Fable. |
 | Dev | Claude Opus 5.5 in T3 Code, one thread per issue | Rates and plans the issue, implements on a new branch from an up-to-date `main`, runs the checks and the review gates, commits, pushes the branch and opens the PR. |
 | PO reviewer | `po-reviewer` subagent (Sonnet 5.5) | Checks plans and finished branches against the issue's acceptance criteria, scope and rating. |
 | Code reviewer | `code-reviewer` subagent (Sonnet 5.5) | Checks the finished branch for bugs, security issues and regressions. |
 
 No agent merges, deletes a branch, pushes `main` or deploys. There are no PO or Reviewer bots, and no fallback to another provider.
+
+Every project repo must have GitHub's "Automatically delete head branches" on (`delete_branch_on_merge`; the README has the command), so nobody deletes a merged branch by hand. When that branch was the base of another PR, GitHub retargets that PR to the deleted branch's base.
 
 ## Size and risk
 
@@ -103,10 +105,17 @@ Every change (a PR, or work meant to become one) has a row in the change ledger:
 
 ## T3 threads
 
-- One thread per issue, titled `ISSUEID-short description` (for example `P1-03-account signup`).
+- One thread per issue, titled `ISSUEID-short description` (for example `P1-03-account signup`). Never take a second issue into a thread: two issues in one thread is how PRs end up stacked.
 - Start one from WSL: `t3 thread start --title '<title>' --provider claudeAgent --model claude-opus-5-5 -- <project> "$(cat prompt.md)"`. Pass the prompt as an argument, not on stdin. `t3 project list` finds the project; `t3 thread show <id>` reads the result.
 - The `t3` CLI has no effort flag: a new thread takes the project's default model and effort in T3 (Opus 5.5, medium). For a Hi or Lg issue, pick high effort in the thread settings when starting it.
 - The prompt names the issue and its rating when the roadmap has one, and says to follow the repo's `AGENTS.md` and the `issue-cycle` skill.
+
+## Stacked PRs
+
+- Prefer no stacking. An issue that depends on another starts its own thread, from an up-to-date `main`, after its dependency merges.
+- When stacking cannot be avoided, the PR body says "stacked on #N; retarget to `main` once #N merges". GitHub retargets it when it deletes #N's branch on merge, but not when the branch was deleted by hand or the repo lacks the setting. Never write "merge #N first": a PR merged into its dependency's branch after that branch merged never reaches `main`.
+- Before asking Filipe to merge a stacked PR, the dev confirms its base is `main` (`gh pr view <N> --json baseRefName`).
+- `change-ledger sync` warns about a merged PR whose merge commit is not on the default branch.
 
 ## Code index
 

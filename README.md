@@ -50,7 +50,7 @@ Keep the clone at `~/.agents`, on `main` or on a branch that has these files; th
 | `finish` | When the PR opens, and after each feedback round: records what the PR text lists under "Questions and decisions", the summary (the first paragraph of its Summary) and the seen rating, then prints the PR's CI and conflicts. A second run brings the record in line with the section: lines already recorded keep their time, lessons keep their number, and what `log` wrote stays. When the file is gone, it reads the PR text from GitHub |
 | `brief` | What `start` prints for the repo in the working directory: open PRs with CI, conflicts, merge order and edited files; work in progress, with changes idle for 3 days flagged; open lessons; last 30 days. Syncs that project first |
 | `set`, `log`, `lesson` | Corrections: one field, or one event. An event added with `log` counts on top of the PR text, so never log a line the PR text already lists. `lesson` also lists lessons and marks one applied or dropped |
-| `sync` | Reads PRs (state, lines, CI, conflicts, commits after opening, merge time) and roadmap ratings. Finds every clone under `~` owned by the `gh` user, PRs nobody logged included |
+| `sync` | Reads PRs (state, lines, CI, conflicts, commits after opening, merge time) and roadmap ratings. Finds every clone under `~` owned by the `gh` user, PRs nobody logged included. Warns about a PR merged in the last 30 days whose merge commit is not on the default branch (a stacked PR merged into a branch that had already merged) |
 | `list`, `show <id>` | Recent changes as a table; one change with its event history |
 | `stats` | Merge rate, clean merges, time to merge, rework, questions by reason, estimate accuracy, data gaps |
 | `report` | Writes `~/.local/share/change-ledger/report.html`, a self-contained dashboard with filters by project and period |
@@ -116,6 +116,8 @@ Each project declares its workflow in the "Agent workflow" section of its `AGENT
 | --- | --- | --- |
 | reviewed | open-data-platform, aconta, pedsletter, plantao, agent-config | Opus 5.5 dev; `code-reviewer` before each code PR; `po-reviewer` on every issue rated above Sm + Lo |
 | solo | dra-victoria-laufer, dra-victoria-laufer-assets, filipeoliveira-hub, filipeoliveira-hub-assets | Opus 5.5 for everything, no reviewers |
+
+A new project repo needs GitHub's "Automatically delete head branches" on, so merged branches go away without anyone deleting them: `gh api -X PATCH repos/<owner>/<repo> -F delete_branch_on_merge=true`.
 
 Extra reviewers are subagent files in the project's own `.claude/agents/`. Every project uses the global `code-reviewer`; a project's own must-check items go in `.claude/review-checklist.md`, which `code-reviewer` reports on item by item (aconta keeps its hard-rule checklist there).
 
