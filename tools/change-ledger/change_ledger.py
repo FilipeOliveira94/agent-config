@@ -730,7 +730,7 @@ def gh(args: list[str], timeout: int = 120, retries: int = 1) -> str:
 # it was last marked ready, for the `ready` event.
 PR_FIELDS = """
 fragment pr on PullRequest {
-  number title url state isDraft createdAt mergedAt closedAt headRefName baseRefName
+  number title url state isDraft createdAt mergedAt closedAt headRefName headRefOid baseRefName
   mergeCommit { oid }
   additions deletions changedFiles mergeable
   author { __typename login }
@@ -797,7 +797,8 @@ def normalize_pr(node: dict) -> dict:
         "state": node.get("state"), "isDraft": node.get("isDraft"), "createdAt": node.get("createdAt"),
         "reviewSince": review_since, "lastReadyAt": last_ready.get("createdAt"),
         "mergedAt": node.get("mergedAt"), "closedAt": node.get("closedAt"),
-        "headRefName": node.get("headRefName"), "baseRefName": node.get("baseRefName"),
+        "headRefName": node.get("headRefName"), "headRefOid": node.get("headRefOid"),
+        "baseRefName": node.get("baseRefName"),
         "mergeCommit": (node.get("mergeCommit") or {}).get("oid"), "additions": node.get("additions"),
         "deletions": node.get("deletions"), "changedFiles": node.get("changedFiles"),
         "mergeable": node.get("mergeable"), "author": {"login": login},
@@ -1126,7 +1127,9 @@ def stranded_merges(repo: str, prs: list[dict]) -> list[str]:
     """Warnings for merged PRs whose merge commit is not on the default branch: a PR stacked on another
     branch and merged after that branch was already merged and deleted. Read-only: it asks GitHub's
     compare API whether each merge commit is an ancestor of the default branch. PRs merged into the
-    default branch itself, and those merged more than STRANDED_DAYS ago, are not checked."""
+    default branch itself, and those merged more than STRANDED_DAYS ago, are not checked. A stranded PR
+    whose head commit later reached the default branch (another PR re-landed its branch) is settled and
+    does not warn."""
     since = now_utc() - timedelta(days=STRANDED_DAYS)
     candidates = [pr for pr in prs if pr.get("mergedAt") and pr.get("mergeCommit") and pr.get("baseRefName")
                   and (parse_ts(pr["mergedAt"]) or since) > since]
@@ -1137,17 +1140,20 @@ def stranded_merges(repo: str, prs: list[dict]) -> list[str]:
     except GhError as err:
         return [f"{repo}: cannot read the default branch for the stranded-merge check: {err}"]
     found = []
+    def on_default(oid: str) -> bool:  # "ahead" or "diverged": the commit is not on the default branch
+        status = gh(["api", f"repos/{repo}/compare/{default}...{oid}", "--jq", ".status"]).strip()
+        return status in ("behind", "identical")
+
     for pr in candidates:
         if pr["baseRefName"] == default:
             continue
         try:
-            status = gh(["api", f"repos/{repo}/compare/{default}...{pr['mergeCommit']}",
-                         "--jq", ".status"]).strip()
+            reached = on_default(pr["mergeCommit"]) or bool(pr.get("headRefOid")) and on_default(pr["headRefOid"])
         except GhError as err:
             found.append(f"{repo}: PR #{pr['number']} merged into {pr['baseRefName']}; "
                          f"cannot check that it reached {default}: {err}")
             continue
-        if status not in ("behind", "identical"):  # "ahead" or "diverged": the merge commit is not on it
+        if not reached:
             found.append(f"{repo}: PR #{pr['number']} merged into {pr['baseRefName']}, not {default}: "
                          f"its changes are not on {default} unless a later PR brought them over")
     return found

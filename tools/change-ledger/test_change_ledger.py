@@ -46,7 +46,8 @@ def ts(delta_hours: float) -> str:
 
 def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits=(-3.1,), checks=(),
          mergeable="MERGEABLE", files=(("src/app.py", 120, 10), ("README.md", 30, 0)), bot=False,
-         draft=False, first_event=None, last_ready=None, more_files=False, base="main", oid=None):
+         draft=False, first_event=None, last_ready=None, more_files=False, base="main", oid=None,
+         head=None):
     """A pull request as the GraphQL query returns it. Times are hours from now. first_event is the
     first draft event on its timeline, e.g. ("ReadyForReviewEvent", -2); last_ready is when it was last
     marked ready; more_files says GitHub has a second page of files (FakeGh.more_files)."""
@@ -58,6 +59,7 @@ def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits
         "mergedAt": ts(merged) if merged is not None else None,
         "closedAt": ts(merged) if merged is not None else None,
         "headRefName": branch, "baseRefName": base, "mergeCommit": {"oid": oid} if oid else None,
+        "headRefOid": head,
         "additions": sum(f[1] for f in files), "deletions": sum(f[2] for f in files),
         "changedFiles": len(files), "mergeable": mergeable,
         "author": {"__typename": "Bot" if bot else "User", "login": "dependabot" if bot else "acme"},
@@ -373,22 +375,27 @@ class Flow(unittest.TestCase):
     def test_sync_warns_about_a_merge_that_never_reached_main(self):
         self.fake.prs = [
             node(88, "feat(P1-05): stacked", "feat/p1-05", state="MERGED", created=-5, merged=-1,
-                 base="feat/p1-04", oid="dead88"),
+                 base="feat/p1-04", oid="dead88", head="head88"),  # head not on main: still warns
             node(87, "feat: stacked, then its base merged", "feat/b", state="MERGED", created=-6, merged=-2,
                  base="feat/a", oid="good87"),
             node(85, "feat(P1-04): base", "feat/p1-04", state="MERGED", created=-8, merged=-3, oid="good85"),
+            node(86, "feat: stranded, then re-landed by another PR", "feat/c", state="MERGED", created=-7,
+                 merged=-2.5, base="feat/gone", oid="dead86", head="head86"),
             node(60, "feat: stranded long ago", "feat/old", state="MERGED", created=-2000, merged=-1999,
                  base="feat/older", oid="dead60"),
         ]
-        self.fake.on_main = {"good87", "good85"}
+        self.fake.on_main = {"good87", "good85", "head86"}
         err = io.StringIO()
         with mock.patch("sys.stderr", err):
             self.run_cli("sync", "--no-roadmaps")
         self.assertIn("PR #88 merged into feat/p1-04, not main: its changes are not on main unless", err.getvalue())
         self.assertNotIn("#87", err.getvalue())
+        self.assertNotIn("#86", err.getvalue())  # its head commit reached main through a later PR
         self.assertNotIn("#60", err.getvalue())  # older than STRANDED_DAYS
         compared = [c[1] for c in self.fake.calls if "/compare/" in c[1]]
-        self.assertEqual(compared, ["repos/acme/demo/compare/main...dead88", "repos/acme/demo/compare/main...good87"])
+        self.assertEqual(compared, ["repos/acme/demo/compare/main...dead88", "repos/acme/demo/compare/main...head88",
+                                    "repos/acme/demo/compare/main...good87",
+                                    "repos/acme/demo/compare/main...dead86", "repos/acme/demo/compare/main...head86"])
 
     def test_sync_reads_open_prs_that_fell_out_of_the_window(self):
         self.fake.prs = [node(1, "feat: old work", "feat/old-work", created=-50)]
