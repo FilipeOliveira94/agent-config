@@ -46,7 +46,7 @@ def ts(delta_hours: float) -> str:
 
 def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits=(-3.1,), checks=(),
          mergeable="MERGEABLE", files=(("src/app.py", 120, 10), ("README.md", 30, 0)), bot=False,
-         draft=False, first_event=None, last_ready=None, more_files=False):
+         draft=False, first_event=None, last_ready=None, more_files=False, base="main", oid=None):
     """A pull request as the GraphQL query returns it. Times are hours from now. first_event is the
     first draft event on its timeline, e.g. ("ReadyForReviewEvent", -2); last_ready is when it was last
     marked ready; more_files says GitHub has a second page of files (FakeGh.more_files)."""
@@ -57,7 +57,8 @@ def node(number, title, branch, state="OPEN", created=-3.0, merged=None, commits
         "state": state, "isDraft": draft, "createdAt": ts(created),
         "mergedAt": ts(merged) if merged is not None else None,
         "closedAt": ts(merged) if merged is not None else None,
-        "headRefName": branch, "additions": sum(f[1] for f in files), "deletions": sum(f[2] for f in files),
+        "headRefName": branch, "baseRefName": base, "mergeCommit": {"oid": oid} if oid else None,
+        "additions": sum(f[1] for f in files), "deletions": sum(f[2] for f in files),
         "changedFiles": len(files), "mergeable": mergeable,
         "author": {"__typename": "Bot" if bot else "User", "login": "dependabot" if bot else "acme"},
         "comments": {"totalCount": 1}, "reviews": {"totalCount": 0},
@@ -82,6 +83,7 @@ class FakeGh:
         self.more_files = {}  # PR number -> the files on its second page
         self.bodies = {}  # PR number -> its description on GitHub
         self.files = {"ROADMAP.md": ROADMAP, "AGENTS.md": AGENTS}
+        self.on_main = set()  # merge commits that are ancestors of main
         self.calls = []
 
     def __call__(self, args, timeout=120, retries=1):
@@ -107,6 +109,10 @@ class FakeGh:
                 raise cl.GhError(f"gh: Could not resolve to a PullRequest with the number of {unknown[-1]}.",
                                  json.dumps(body))
             return json.dumps(body)
+        if args[:2] == ["api", "repos/acme/demo"]:
+            return "main\n"
+        if args[0] == "api" and "/compare/main..." in args[1]:
+            return ("behind" if args[1].rsplit("...", 1)[1] in self.on_main else "diverged") + "\n"
         if args[0] == "api" and "/pulls/" in args[1]:
             return self.bodies.get(int(args[1].rsplit("/", 1)[1]), "") + "\n"
         if args[0] == "api" and "contents/" in args[-1]:
@@ -363,6 +369,26 @@ class Flow(unittest.TestCase):
         before = len(self.query("SELECT id FROM events"))
         self.run_cli("sync")  # nothing changed on GitHub: no new events
         self.assertEqual(len(self.query("SELECT id FROM events")), before)
+
+    def test_sync_warns_about_a_merge_that_never_reached_main(self):
+        self.fake.prs = [
+            node(88, "feat(P1-05): stacked", "feat/p1-05", state="MERGED", created=-5, merged=-1,
+                 base="feat/p1-04", oid="dead88"),
+            node(87, "feat: stacked, then its base merged", "feat/b", state="MERGED", created=-6, merged=-2,
+                 base="feat/a", oid="good87"),
+            node(85, "feat(P1-04): base", "feat/p1-04", state="MERGED", created=-8, merged=-3, oid="good85"),
+            node(60, "feat: stranded long ago", "feat/old", state="MERGED", created=-2000, merged=-1999,
+                 base="feat/older", oid="dead60"),
+        ]
+        self.fake.on_main = {"good87", "good85"}
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.run_cli("sync", "--no-roadmaps")
+        self.assertIn("PR #88 merged into feat/p1-04, not main: its changes are not on main unless", err.getvalue())
+        self.assertNotIn("#87", err.getvalue())
+        self.assertNotIn("#60", err.getvalue())  # older than STRANDED_DAYS
+        compared = [c[1] for c in self.fake.calls if "/compare/" in c[1]]
+        self.assertEqual(compared, ["repos/acme/demo/compare/main...dead88", "repos/acme/demo/compare/main...good87"])
 
     def test_sync_reads_open_prs_that_fell_out_of_the_window(self):
         self.fake.prs = [node(1, "feat: old work", "feat/old-work", created=-50)]

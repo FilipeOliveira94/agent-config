@@ -7,7 +7,9 @@ description: "Takes an issue (or phase) from plan to an open PR for Filipe to re
 
 One issue or phase at a time. The acceptance text is the definition of done: do not pull in future issues and do not change the acceptance while building. The general rules (language, roles, size and risk, review gates and model policy) are in `~/.agents/claude/workflow.md`; the repository's `AGENTS.md` prevails on anything project-specific, including its "Agent workflow" section.
 
-Cycle: start → rate size and risk → plan → (when the plan stops: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's: the agent never merges and never deletes a branch.
+Cycle: start → rate size and risk → plan → (when the plan stops: `po-reviewer` on the plan in a `reviewed` project, and Filipe's approval) → implementation on a new branch from an up-to-date `main` → checks and tests → review gates → commit, push of the branch, PR with a summary and `finish` → CI and conflict check. The merge is always Filipe's, and GitHub deletes the merged head branch (`delete_branch_on_merge`). The agent never merges and never deletes a branch.
+
+One thread holds one issue. Do not take a second issue into the thread, even a dependent one: that is how PRs end up stacked ("Stacked PRs" in `workflow.md`).
 
 The change ledger ("Change ledger" in `workflow.md`) is written twice, each time inside a command you are running anyway: `change-ledger start` when the work begins and `change-ledger finish` when the PR opens. Run both from the repo's checkout. They find the change from the git branch or the T3 thread; on `main` outside T3, pass `--id <change id>` from `start`.
 
@@ -52,7 +54,7 @@ When the plan stops in a `reviewed` project, run `po-reviewer` (mode `plan`) wit
 
 ## 2. Implement
 
-Update `main` (`git pull`) and create a new branch from it.
+Update `main` (`git pull`) and create a new branch from it. Do not branch from another open PR's branch. If the issue depends on an open PR, wait for it to merge; when stacking cannot be avoided, follow "Stacked PRs" in `workflow.md`: the PR body says "stacked on #N; retarget to `main` once #N merges", never "merge #N first".
 
 Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `module-boundaries` skill; the project's existing architecture prevails.
 
@@ -90,7 +92,8 @@ Once the title and body are written, run the `plain-voice` skill (engineering re
 
 Open the PR and finish the ledger in one command: `gh pr create --title "<title>" --body-file <PR text file> && change-ledger finish --seen-risk <Lo|Med|Hi> --seen-size <Sm|Md|Lg>`.
 - Add `--risk` and `--size` when the roadmap has no rating or the plan changed it (with `--rating-note`). Add `--merge-after <repo#N>` when another PR must merge first, and `--owner-actions "<what Filipe does at merge>"` when the merge needs a step from him (run `install.sh`, a migration, a setting).
+- A stacked PR: before you ask Filipe to merge it, confirm its base is `main` (`gh pr view <N> --json baseRefName`).
 - Read the PR line `finish` prints. Fix a failing check or a conflict with `main` before handing back, and name a check that is still pending in the handoff.
 - When `finish` warns about a line it cannot read, or a missing plan line, fix the PR text. Then run `gh pr edit --body-file <PR text file> && change-ledger finish` in one command.
 
-Stop there. Do not merge, do not delete the branch, do not run CD. Fixes requested in review go in as new commits on the same branch. Add `- feedback: <what Filipe asked>` to the PR text, plus a lesson line when the round could have been avoided. Then push, update the PR and finish in one command: `git push && gh pr edit --body-file <PR text file> && change-ledger finish`.
+Stop there. Do not merge, do not delete the branch (GitHub deletes it on merge), do not run CD. Fixes requested in review go in as new commits on the same branch. Add `- feedback: <what Filipe asked>` to the PR text, plus a lesson line when the round could have been avoided. Then push, update the PR and finish in one command: `git push && gh pr edit --body-file <PR text file> && change-ledger finish`.
