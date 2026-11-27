@@ -375,7 +375,7 @@ class Flow(unittest.TestCase):
     def test_sync_warns_about_a_merge_that_never_reached_main(self):
         self.fake.prs = [
             node(88, "feat(P1-05): stacked", "feat/p1-05", state="MERGED", created=-5, merged=-1,
-                 base="feat/p1-04", oid="dead88"),
+                 base="feat/p1-04", oid="dead88", head="head88"),  # head not on main: still warns
             node(87, "feat: stacked, then its base merged", "feat/b", state="MERGED", created=-6, merged=-2,
                  base="feat/a", oid="good87"),
             node(85, "feat(P1-04): base", "feat/p1-04", state="MERGED", created=-8, merged=-3, oid="good85"),
@@ -393,7 +393,8 @@ class Flow(unittest.TestCase):
         self.assertNotIn("#86", err.getvalue())  # its head commit reached main through a later PR
         self.assertNotIn("#60", err.getvalue())  # older than STRANDED_DAYS
         compared = [c[1] for c in self.fake.calls if "/compare/" in c[1]]
-        self.assertEqual(compared, ["repos/acme/demo/compare/main...dead88", "repos/acme/demo/compare/main...good87",
+        self.assertEqual(compared, ["repos/acme/demo/compare/main...dead88", "repos/acme/demo/compare/main...head88",
+                                    "repos/acme/demo/compare/main...good87",
                                     "repos/acme/demo/compare/main...dead86", "repos/acme/demo/compare/main...head86"])
 
     def test_sync_reads_open_prs_that_fell_out_of_the_window(self):
