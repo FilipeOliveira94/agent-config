@@ -54,7 +54,7 @@ When the plan stops in a `reviewed` project, run `po-reviewer` (mode `plan`) wit
 
 ## 2. Implement
 
-Update `main` (`git pull`) and create a new branch from it. Do not branch from another open PR's branch. If the issue depends on an open PR, wait for it to merge; when stacking cannot be avoided, follow "Stacked PRs" in `workflow.md`: the PR body says "stacked on #N; retarget to `main` once #N merges", never "merge #N first".
+Update `main` (`git pull`) and create a new branch from it. Prefer not to branch from another open PR's branch: if the issue depends on an open PR, wait for it to merge. If stacking cannot be avoided, follow "Stacked PRs" in `workflow.md`: the PR body says "stacked on #N; retarget to `main` once #N merges", never "merge #N first".
 
 Make the smallest change that makes the accepted behavior true. Do not add confirmations, restrictions or steps the issue did not ask for. When extracting repeated logic or choosing module boundaries, consult the `module-boundaries` skill; the project's existing architecture prevails.
 
